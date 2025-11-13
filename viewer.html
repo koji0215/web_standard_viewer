@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -132,85 +132,71 @@
 
         .star-list {
             flex: 1;
-            overflow-y: auto;
-            padding: 10px;
+            overflow: auto;
+            padding: 0;
         }
 
-        .star-item {
+        /* Table styles */
+        .star-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            background-color: #2a2a2a;
+        }
+
+        .star-table thead {
+            position: sticky;
+            top: 0;
             background-color: #333;
-            padding: 12px;
-            margin-bottom: 8px;
-            border-radius: 4px;
+            z-index: 10;
+        }
+
+        .star-table th {
+            padding: 10px 8px;
+            text-align: left;
+            border-bottom: 2px solid #444;
+            font-weight: bold;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        .star-table td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+            white-space: nowrap;
+        }
+
+        .star-table tbody tr {
             cursor: pointer;
-            border: 2px solid transparent;
+            transition: background-color 0.2s;
         }
 
-        .star-item:hover {
+        .star-table tbody tr:hover {
             background-color: #3a3a3a;
         }
 
-        .star-item.selected {
-            border-color: #ffff00;
+        .star-table tbody tr.selected {
             background-color: #3a3a3a;
+            border-left: 4px solid #ffff00;
         }
 
-        .star-item.recommended {
+        .star-table tbody tr.recommended {
             background-color: #4a3a5a;
-            border-color: #ff00ff;
+            border-left: 4px solid #ff00ff;
         }
 
-        .star-item.recommended.selected {
-            border-color: #ffff00;
+        .star-table tbody tr.recommended.selected {
             background-color: #5a4a6a;
+            border-left: 4px solid #ffff00;
         }
 
-        .star-item-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-        }
-
-        .star-number {
+        .star-table .star-number {
             font-weight: bold;
             color: #4af;
-            font-size: 16px;
         }
 
-        .star-item.selected .star-number {
+        .star-table tbody tr.selected .star-number {
             color: #ffff00;
-        }
-
-        .star-distance {
-            color: #aaa;
-            font-size: 13px;
-        }
-
-        .star-coords {
-            font-size: 13px;
-            color: #bbb;
-            margin-bottom: 5px;
-        }
-
-        .star-details {
-            font-size: 12px;
-            color: #888;
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 1px solid #444;
-        }
-
-        .star-detail-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 3px;
-        }
-
-        .star-detail-label {
-            color: #999;
-        }
-
-        .star-detail-value {
-            color: #ddd;
         }
 
         .observation-panel {
@@ -398,10 +384,10 @@
 </head>
 <body>
     <div class="header">
-        <h1>Sky Viewer - 検索結果</h1>
+        <h1>Sky Viewer - Search Results</h1>
         <div class="header-controls">
             <span id="target-display" style="color: #aaa; font-size: 14px;">Target: -</span>
-            <button id="back-button">← 新規検索</button>
+            <button id="back-button">← New Search</button>
         </div>
     </div>
 
@@ -414,21 +400,21 @@
                 </div>
             </div>
             <div class="aladin-info">
-                <div><strong>視野:</strong> 25 arcmin</div>
+                <div><strong>FoV:</strong> 25 arcmin</div>
                 <div><strong>P.A.:</strong> <span id="pa-display">0°</span></div>
                 <div class="legend">
-                    <div style="font-weight: bold; margin-bottom: 8px;">マーカー凡例</div>
+                    <div style="font-weight: bold; margin-bottom: 8px;">Marker Legend</div>
                     <div class="legend-item">
                         <div class="legend-color selected"></div>
-                        <span>選択された星</span>
+                        <span>Selected star</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color recommended"></div>
-                        <span>推奨ガイド星</span>
+                        <span>Recommended guide star</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-color other"></div>
-                        <span>その他の星</span>
+                        <span>Other stars</span>
                     </div>
                 </div>
             </div>
@@ -436,16 +422,16 @@
 
         <div class="right-panel">
             <div class="panel-header">
-                <h2>視野内の星 (25 arcmin)</h2>
+                <h2>Stars in FoV (25 arcmin)</h2>
                 <div class="filter-row">
-                    <label for="mag-band-select">等級フィルター:</label>
+                    <label for="mag-band-select">Magnitude Filter:</label>
                     <select id="mag-band-select">
-                        <option value="">フィルターなし</option>
+                        <option value="">No Filter</option>
                     </select>
                     <input type="number" id="mag-min" placeholder="Min" step="0.1">
                     <span>~</span>
                     <input type="number" id="mag-max" placeholder="Max" step="0.1">
-                    <button id="apply-mag-filter-button">適用</button>
+                    <button id="apply-mag-filter-button">Apply</button>
                 </div>
             </div>
             <div class="star-list" id="star-list">
@@ -454,13 +440,13 @@
                 </div>
             </div>
             <div class="observation-panel">
-                <h3>観測座標</h3>
+                <h3>Observation Coordinates</h3>
                 <div class="coord-label">Target:</div>
                 <div class="coord-display" id="target-coord-display">-</div>
                 <div class="coord-label">Guide Star:</div>
                 <div class="coord-display" id="guide-star-coord-display">-</div>
-                <button id="confirm-button" disabled>この星で観測する</button>
-                <button id="show-mimizuku-button" disabled>MIMIZUKU デュアルフィールドを表示</button>
+                <button id="confirm-button" disabled>Observe with this star</button>
+                <button id="show-mimizuku-button" disabled>Show MIMIZUKU Dual Field</button>
             </div>
         </div>
     </div>
@@ -472,16 +458,16 @@
                 <h2>MIMIZUKU Dual Field View (1'×2' each)</h2>
                 <div class="modal-buttons">
                     <button id="toggle-png-view-button">
-                        <span id="png-mode-text">PNG表示に切替</span>
+                        <span id="png-mode-text">Switch to PNG View</span>
                     </button>
-                    <button id="close-mimizuku-button" style="background-color: #c00;">閉じる</button>
+                    <button id="close-mimizuku-button" style="background-color: #c00;">Close</button>
                 </div>
             </div>
             <div id="mimizuku-view-container">
                 <div id="mimizuku-field"></div>
             </div>
             <div class="modal-description">
-                <p id="mimizuku-description">ターゲットとガイド星の両方の視野を表示 (各1'×2')</p>
+                <p id="mimizuku-description">Showing both Target and Guide Star fields (1'×2' each)</p>
             </div>
         </div>
     </div>
@@ -544,7 +530,7 @@
                     window.skyViewer.drawRecommendedWedges();
                     
                     // Display and plot the restored stars
-                    window.skyViewer.displayStars();
+                    window.skyViewer.displayStarsAsTable();
                     window.skyViewer.plotStarsOnAladin();
                 } else {
                     setTimeout(initViewer, 500);

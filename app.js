@@ -392,6 +392,60 @@ class SkyViewer {
         container.querySelectorAll('.star-item').forEach((el, idx) => el.addEventListener('click', () => this.selectStar(idx)));
     }
 
+    displayStarsAsTable() {
+        const container = document.getElementById('star-list'); 
+        if (!container) return;
+        if (!this.starsInFov.length) { 
+            this.showStatus('No stars found.', 'info'); 
+            return; 
+        }
+
+        // Build column headers dynamically
+        const baseColumns = ['#', 'RA', 'Dec', 'Sep (")', 'P.A. (°)', 'Catalog'];
+        const allColumns = [...baseColumns, ...this.availableColumns];
+
+        // Create table HTML
+        let tableHTML = '<table class="star-table"><thead><tr>';
+        allColumns.forEach(col => {
+            tableHTML += `<th>${col}</th>`;
+        });
+        tableHTML += '</tr></thead><tbody>';
+
+        // Add rows
+        this.starsInFov.forEach((star, i) => {
+            const isRec = this.isStarRecommended(star.pa);
+            const isSel = i === this.selectedIndex;
+            const rowClass = `${isRec ? 'recommended' : ''} ${isSel ? 'selected' : ''}`.trim();
+            
+            tableHTML += `<tr class="${rowClass}" data-index="${i}">`;
+            tableHTML += `<td class="star-number">${i + 1}</td>`;
+            tableHTML += `<td>${this.formatRA(star.ra)}</td>`;
+            tableHTML += `<td>${this.formatDec(star.dec)}</td>`;
+            tableHTML += `<td>${(star.separation * 60).toFixed(2)}</td>`;
+            tableHTML += `<td>${star.pa.toFixed(1)}</td>`;
+            tableHTML += `<td>${star.catalog || '-'}</td>`;
+            
+            // Add extra columns
+            this.availableColumns.forEach(col => {
+                const val = star.data[col];
+                const displayVal = val != null && val !== '' 
+                    ? (typeof val === 'number' ? val.toFixed(2) : val) 
+                    : '-';
+                tableHTML += `<td>${displayVal}</td>`;
+            });
+            
+            tableHTML += '</tr>';
+        });
+
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+
+        // Attach click handlers
+        container.querySelectorAll('tr[data-index]').forEach((el, idx) => {
+            el.addEventListener('click', () => this.selectStar(parseInt(el.dataset.index)));
+        });
+    }
+
     plotStarsOnAladin() {
         this.ensureStarCatalogAttached();
         this.starCatalog.removeAll();
