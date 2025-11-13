@@ -137,6 +137,7 @@ class SkyViewer {
         bind('close-mimizuku-button', () => this.closeMimizukuDualField());
         bind('toggle-png-view-button', () => this.togglePNGView());
         bind('check-observability-button', () => this.checkObservability());
+        bind('view-results-button', () => this.navigateToViewer());
 
         const today = new Date().toISOString().split('T')[0];
         const dateEl = document.getElementById('obs-date');
@@ -352,6 +353,10 @@ class SkyViewer {
         this.filterStars();
         this.displayStars();
         this.plotStarsOnAladin();
+        
+        // Enable the detailed view button if stars were found
+        const viewButton = document.getElementById('view-results-button');
+        if (viewButton) viewButton.disabled = this.starsInFov.length === 0;
     }
 
     filterStars() {
@@ -794,6 +799,26 @@ class SkyViewer {
         if (button) button.textContent = 'Switch to PNG View';
         const container = document.getElementById('mimizuku-view-container');
         if (container) container.innerHTML = '<div id="mimizuku-field" style="flex:1;background:#000;border:2px solid #444;position:relative;"></div>';
+    }
+
+    // ---------- Navigation ----------
+    navigateToViewer() {
+        if (!this.targetCoord || !this.catalogs.length) return;
+        
+        // Store current state in sessionStorage
+        const viewerData = {
+            targetCoord: this.targetCoord,
+            targetInput: document.getElementById('target-input')?.value || '',
+            instPA: this.instPA,
+            paTolerance: this.paTolerance,
+            paRestrict: this.paRestrict,
+            catalogs: this.catalogs
+        };
+        
+        sessionStorage.setItem('viewerData', JSON.stringify(viewerData));
+        
+        // Navigate to viewer page
+        window.location.href = 'viewer.html';
     }
 
     // ---------- Observability (unchanged) ----------
