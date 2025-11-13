@@ -280,18 +280,28 @@ class SkyViewer {
     }
 
     async loadCatalogs() {
+        console.time('loadCatalogs');
         const files = document.getElementById('catalog-file')?.files;
         if (!files?.length) { this.showStatus('Please select a CSV file.', 'error'); return; }
         this.showLoading(true);
         this.catalogs = [];
         for (let f of files) {
-            try { this.catalogs.push({ name: f.name, data: await this.parseCatalogFile(f) }); }
+            try {
+                console.time(`  - parse ${f.name}`);
+                const data = await this.parseCatalogFile(f);
+                console.timeEnd(`  - parse ${f.name}`);
+                console.log(`    ${data.length} rows loaded`);
+                this.catalogs.push({ name: f.name, data });
+            }
             catch (e) { console.error('loadCatalog error:', f.name, e); }
         }
+        console.time('  - detectColumns');
         this.detectAvailableColumns();
+        console.timeEnd('  - detectColumns');
         this.updateMagFilterDropdown();
         this.showLoading(false);
         this.showStatus(`Loaded ${this.catalogs.length} catalog(s).`, 'success');
+        console.timeEnd('loadCatalogs');
         if (this.targetCoord) this.findStarsInFov();
     }
 
@@ -332,9 +342,11 @@ class SkyViewer {
     }
 
     findStarsInFov() {
+        console.time('findStarsInFov');
         if (!this.targetCoord) { this.showStatus('Please search for a target first.', 'error'); return; }
         if (!this.catalogs.length) { this.showStatus('No catalogs loaded.', 'info'); return; }
 
+        console.time('  - search loop');
         this.starsInFov = [];
         for (const { name, data } of this.catalogs) {
             for (const row of data) {
@@ -352,16 +364,28 @@ class SkyViewer {
                 }
             }
         }
+        console.timeEnd('  - search loop');
+        console.log(`  - found ${this.starsInFov.length} stars`);
+
+        console.time('  - sort and filter');
         this.starsInFov.sort((a, b) => a.separation - b.separation);
         if (this.starsInFov.length > 500) this.starsInFov = this.starsInFov.slice(0, 500);
         this.allStarsInFov = [...this.starsInFov];
         this.filterStars();
+        console.timeEnd('  - sort and filter');
+
+        console.time('  - displayStars');
         this.displayStars();
+        console.timeEnd('  - displayStars');
+
+        console.time('  - plotStarsOnAladin');
         this.plotStarsOnAladin();
+        console.timeEnd('  - plotStarsOnAladin');
         
         // Enable the detailed view button if stars were found
         const viewButton = document.getElementById('view-results-button');
         if (viewButton) viewButton.disabled = this.starsInFov.length === 0;
+        console.timeEnd('findStarsInFov');
     }
 
     filterStars() {
@@ -601,7 +625,7 @@ class SkyViewer {
         }
         this.plotStarsOnAladin();
 
-        ['confirm-button', 'show-mimizuku-button', 'check-observability-button'].forEach(id => {
+        ['confirm-button', 'show-mimizuku-button', 'check-observability-button', 'check-observability-button-viewer'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.disabled = (this.selectedIndex < 0);
         });
@@ -995,7 +1019,7 @@ class SkyViewer {
 
     // ---------- Observability (unchanged) ----------
     async checkObservability(){if(!this.targetCoord||!this.selectedStar){const r=document.getElementById('observability-results');if(r)r.innerHTML='<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Select target & guide first.</div>';return}const dateString=document.getElementById('obs-date')?.value,locationKey=document.getElementById('obs-location')?.value,resultsDiv=document.getElementById('observability-results');if(!dateString){if(resultsDiv)resultsDiv.innerHTML='<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Select a date.</div>';return}if(resultsDiv)resultsDiv.innerHTML='<div style="color:#aaa;padding:8px;">Checking...</div>';try{const loc=this.getObservatoryLocation(locationKey),obsDate=new Date(dateString+'T12:00:00'),sunTimes=this.findSunriseSunset(obsDate,loc),tInfo=this.checkTargetObservability(this.targetCoord.ra,this.targetCoord.dec,obsDate,loc),gInfo=this.checkTargetObservability(this.selectedStar.ra,this.selectedStar.dec,obsDate,loc);this.displayObservabilityResults({location:loc,sun:{sunrise:sunTimes.sunrise?.toISOString()||null,sunset:sunTimes.sunset?.toISOString()||null},twilight:{evening_astronomical:sunTimes.evening_twilight?.toISOString()||null,morning_astronomical:sunTimes.morning_twilight?.toISOString()||null},target_info:{...tInfo}},{location:loc,sun:sunTimes,twilight:sunTimes.twilight,target_info:{...gInfo}})}catch(e){console.error('Observability error:',e);if(resultsDiv)resultsDiv.innerHTML=`<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Error: ${e.message}</div>`}}
-    displayObservabilityResults(targetData,guideData){const r=document.getElementById('observability-results');if(!r)return;const fmt=iso=>{if(!iso)return'N/A';const p=iso.split('T');return p.length<2?'N/A':p[1].split('.')[0]||'N/A'},okT=targetData.target_info.observable,okG=guideData.target_info.observable,both=okT&&okG,color=both?'#4a4':'#a44',status=both?'✓ Observable':'✗ Not Observable';r.innerHTML=`<div style="background:#333;padding:10px;border-radius:4px;border:2px solid ${color};"><div style="font-weight:bold;color:${color};margin-bottom:8px;font-size:14px;">${status}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Night Times (${targetData.location.name}):</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Sunset: ${fmt(targetData.sun.sunset)}<br>Twilight: ${fmt(targetData.twilight.evening_astronomical)} to ${fmt(targetData.twilight.morning_astronomical)}<br>Sunrise: ${fmt(targetData.sun.sunrise)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Target:</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Observable: ${okT?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(targetData.target_info.best_time)}<br>Best Alt: ${targetData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(targetData.target_info.rise_time)} / ${fmt(targetData.target_info.set_time)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Guide Star:</strong></div><div style="font-size:11px;margin-left:8px;">Observable: ${okG?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(guideData.target_info.best_time)}<br>Best Alt: ${guideData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(guideData.target_info.rise_time)} / ${fmt(guideData.target_info.set_time)}</div></div>`}
+    displayObservabilityResults(targetData,guideData,resultsDivId='observability-results'){const r=document.getElementById(resultsDivId);if(!r)return;const fmt=iso=>{if(!iso)return'N/A';const p=iso.split('T');return p.length<2?'N/A':p[1].split('.')[0]||'N/A'},okT=targetData.target_info.observable,okG=guideData.target_info.observable,both=okT&&okG,color=both?'#4a4':'#a44',status=both?'✓ Observable':'✗ Not Observable';r.innerHTML=`<div style="background:#333;padding:10px;border-radius:4px;border:2px solid ${color};"><div style="font-weight:bold;color:${color};margin-bottom:8px;font-size:14px;">${status}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Night Times (${targetData.location.name}):</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Sunset: ${fmt(targetData.sun.sunset)}<br>Twilight: ${fmt(targetData.twilight.evening_astronomical)} to ${fmt(targetData.twilight.morning_astronomical)}<br>Sunrise: ${fmt(targetData.sun.sunrise)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Target:</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Observable: ${okT?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(targetData.target_info.best_time)}<br>Best Alt: ${targetData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(targetData.target_info.rise_time)} / ${fmt(targetData.target_info.set_time)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Guide Star:</strong></div><div style="font-size:11px;margin-left:8px;">Observable: ${okG?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(guideData.target_info.best_time)}<br>Best Alt: ${guideData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(guideData.target_info.rise_time)} / ${fmt(guideData.target_info.set_time)}</div></div>`}
     getObservatoryLocation(key){const m={subaru:{name:'Subaru',lat:19.826,lon:-155.4747},keck:{name:'Keck',lat:19.8283,lon:-155.4783},magellan:{name:'Magellan',lat:-29.0146,lon:-70.6926},vlt:{name:'VLT',lat:-24.6275,lon:-70.4044}};return m[key]||m.subaru}
     dateToJulianDate(d){return d.getTime()/864e5+2440587.5}
     julianDateToGMST(jd){const T=(jd-2451545)/36525;let g=280.46061837+360.98564736629*(jd-2451545)+T*T*(.000387933-T/3871e4);return(g%=360)<0?g+360:g}

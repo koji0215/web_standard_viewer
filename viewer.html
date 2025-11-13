@@ -390,6 +390,52 @@
             font-size: 14px;
             flex-shrink: 0;
         }
+
+        /* Accordion styles */
+        .accordion-header {
+            background-color: #3a3a3a;
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            user-select: none;
+        }
+
+        .accordion-header:hover {
+            background-color: #4a4a4a;
+        }
+
+        .accordion-header h3 {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .accordion-icon {
+            transition: transform 0.3s;
+            font-size: 18px;
+        }
+
+        .accordion-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .accordion-content.expanded {
+            max-height: 500px;
+            transition: max-height 0.3s ease-in;
+        }
+
+        .accordion-inner {
+            padding: 10px 15px;
+        }
     </style>
 </head>
 <body>
@@ -412,21 +458,6 @@
             <div class="aladin-info">
                 <div><strong>FoV:</strong> 25 arcmin</div>
                 <div><strong>P.A.:</strong> <span id="pa-display">0°</span></div>
-                <div class="legend">
-                    <div style="font-weight: bold; margin-bottom: 8px;">Marker Legend</div>
-                    <div class="legend-item">
-                        <div class="legend-color selected"></div>
-                        <span>Selected star</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color recommended"></div>
-                        <span>Recommended guide star</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color other"></div>
-                        <span>Other stars</span>
-                    </div>
-                </div>
             </div>
         </div>
 
@@ -457,6 +488,31 @@
                 <div class="coord-display" id="guide-star-coord-display">-</div>
                 <button id="confirm-button" disabled>Observe with this star</button>
                 <button id="show-mimizuku-button" disabled>Show MIMIZUKU Dual Field</button>
+
+                <!-- Observability Check Accordion -->
+                <div class="accordion-header" id="obs-check-header" style="margin-top: 15px;">
+                    <h3>Observability Check</h3>
+                    <span class="accordion-icon">▼</span>
+                </div>
+                <div class="accordion-content" id="obs-check-content">
+                    <div class="accordion-inner">
+                        <div style="margin-bottom: 8px;">
+                            <label for="obs-date-viewer" style="font-size: 12px; color: #aaa;">Date:</label>
+                            <input type="date" id="obs-date-viewer" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <label for="obs-location-viewer" style="font-size: 12px; color: #aaa;">Location:</label>
+                            <select id="obs-location-viewer" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                                <option value="subaru">Subaru (Mauna Kea)</option>
+                                <option value="keck">Keck Observatory</option>
+                                <option value="magellan">Magellan (Las Campanas)</option>
+                                <option value="vlt">VLT (Paranal)</option>
+                            </select>
+                        </div>
+                        <button id="check-observability-button-viewer" style="width: 100%; margin-top: 4px;" disabled>Check Observability</button>
+                        <div id="observability-results-viewer" style="margin-top: 10px; font-size: 12px;"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -564,6 +620,89 @@
                 sessionStorage.removeItem('viewerData');
                 window.location.href = 'index.html';
             });
+
+            // Setup observability check accordion
+            const obsCheckHeader = document.getElementById('obs-check-header');
+            const obsCheckContent = document.getElementById('obs-check-content');
+            const obsCheckIcon = obsCheckHeader?.querySelector('.accordion-icon');
+            if (obsCheckHeader && obsCheckContent) {
+                obsCheckHeader.addEventListener('click', () => {
+                    obsCheckContent.classList.toggle('expanded');
+                    obsCheckIcon?.classList.toggle('expanded');
+                });
+            }
+
+            // Set default date for observability check
+            const today = new Date().toISOString().split('T')[0];
+            const dateEl = document.getElementById('obs-date-viewer');
+            if (dateEl) dateEl.value = today;
+
+            // Setup observability check button
+            const checkObsButton = document.getElementById('check-observability-button-viewer');
+            if (checkObsButton) {
+                checkObsButton.addEventListener('click', () => {
+                    if (window.skyViewer) {
+                        const dateString = document.getElementById('obs-date-viewer')?.value;
+                        const locationKey = document.getElementById('obs-location-viewer')?.value;
+                        const resultsDiv = document.getElementById('observability-results-viewer');
+                        
+                        if (!dateString) {
+                            if (resultsDiv) resultsDiv.innerHTML = '<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Select a date.</div>';
+                            return;
+                        }
+                        
+                        if (!window.skyViewer.targetCoord || !window.skyViewer.selectedStar) {
+                            if (resultsDiv) resultsDiv.innerHTML = '<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Select target & guide star first.</div>';
+                            return;
+                        }
+                        
+                        if (resultsDiv) resultsDiv.innerHTML = '<div style="color:#aaa;padding:8px;">Checking...</div>';
+                        
+                        try {
+                            const loc = window.skyViewer.getObservatoryLocation(locationKey);
+                            const obsDate = new Date(dateString + 'T12:00:00');
+                            const sunTimes = window.skyViewer.findSunriseSunset(obsDate, loc);
+                            const tInfo = window.skyViewer.checkTargetObservability(
+                                window.skyViewer.targetCoord.ra,
+                                window.skyViewer.targetCoord.dec,
+                                obsDate,
+                                loc
+                            );
+                            const gInfo = window.skyViewer.checkTargetObservability(
+                                window.skyViewer.selectedStar.ra,
+                                window.skyViewer.selectedStar.dec,
+                                obsDate,
+                                loc
+                            );
+                            
+                            window.skyViewer.displayObservabilityResults(
+                                {
+                                    location: loc,
+                                    sun: {
+                                        sunrise: sunTimes.sunrise?.toISOString() || null,
+                                        sunset: sunTimes.sunset?.toISOString() || null
+                                    },
+                                    twilight: {
+                                        evening_astronomical: sunTimes.evening_twilight?.toISOString() || null,
+                                        morning_astronomical: sunTimes.morning_twilight?.toISOString() || null
+                                    },
+                                    target_info: { ...tInfo }
+                                },
+                                {
+                                    location: loc,
+                                    sun: sunTimes,
+                                    twilight: sunTimes.twilight,
+                                    target_info: { ...gInfo }
+                                },
+                                'observability-results-viewer'
+                            );
+                        } catch (e) {
+                            console.error('Observability error:', e);
+                            if (resultsDiv) resultsDiv.innerHTML = `<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Error: ${e.message}</div>`;
+                        }
+                    }
+                });
+            }
         });
     </script>
 </body>
