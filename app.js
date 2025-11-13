@@ -426,6 +426,20 @@ class SkyViewer {
         });
 
         this.starCatalog.addSources(sources);
+        
+        // Force Aladin to redraw the view to reflect changes
+        try {
+            this.aladin.view.requestRedraw();
+        } catch (e) {
+            // Fallback: trigger a minimal view change to force redraw
+            try {
+                const currentFov = this.aladin.getFov();
+                this.aladin.setFoV(currentFov[0]);
+            } catch (e2) {
+                console.warn('Could not force Aladin redraw:', e2);
+            }
+        }
+        
         this.attachCanvasHitTestForMainAladin();
     }
 
