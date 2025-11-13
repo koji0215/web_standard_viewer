@@ -23,6 +23,11 @@ class SkyViewer {
         this.availableColumns = [];
         this.displayColumns = ['separation', 'pa'];
 
+        // Display mode: 'cards' or 'table'
+        this.displayMode = 'cards';
+        this.sortColumn = null;
+        this.sortDirection = 'asc';
+
         // MIMIZUKU dual-field / PNG
         this.mimizukuAladin = null;
         this.mimizukuPNGMode = false;
@@ -275,18 +280,28 @@ class SkyViewer {
     }
 
     async loadCatalogs() {
+        console.time('loadCatalogs');
         const files = document.getElementById('catalog-file')?.files;
         if (!files?.length) { this.showStatus('Please select a CSV file.', 'error'); return; }
         this.showLoading(true);
         this.catalogs = [];
         for (let f of files) {
-            try { this.catalogs.push({ name: f.name, data: await this.parseCatalogFile(f) }); }
+            try {
+                console.time(`  - parse ${f.name}`);
+                const data = await this.parseCatalogFile(f);
+                console.timeEnd(`  - parse ${f.name}`);
+                console.log(`    ${data.length} rows loaded`);
+                this.catalogs.push({ name: f.name, data });
+            }
             catch (e) { console.error('loadCatalog error:', f.name, e); }
         }
+        console.time('  - detectColumns');
         this.detectAvailableColumns();
+        console.timeEnd('  - detectColumns');
         this.updateMagFilterDropdown();
         this.showLoading(false);
         this.showStatus(`Loaded ${this.catalogs.length} catalog(s).`, 'success');
+        console.timeEnd('loadCatalogs');
         if (this.targetCoord) this.findStarsInFov();
     }
 
@@ -327,9 +342,11 @@ class SkyViewer {
     }
 
     findStarsInFov() {
+        console.time('findStarsInFov');
         if (!this.targetCoord) { this.showStatus('Please search for a target first.', 'error'); return; }
         if (!this.catalogs.length) { this.showStatus('No catalogs loaded.', 'info'); return; }
 
+        console.time('  - search loop');
         this.starsInFov = [];
         for (const { name, data } of this.catalogs) {
             for (const row of data) {
@@ -347,16 +364,28 @@ class SkyViewer {
                 }
             }
         }
+        console.timeEnd('  - search loop');
+        console.log(`  - found ${this.starsInFov.length} stars`);
+
+        console.time('  - sort and filter');
         this.starsInFov.sort((a, b) => a.separation - b.separation);
         if (this.starsInFov.length > 500) this.starsInFov = this.starsInFov.slice(0, 500);
         this.allStarsInFov = [...this.starsInFov];
         this.filterStars();
+        console.timeEnd('  - sort and filter');
+
+        console.time('  - displayStars');
         this.displayStars();
+        console.timeEnd('  - displayStars');
+
+        console.time('  - plotStarsOnAladin');
         this.plotStarsOnAladin();
+        console.timeEnd('  - plotStarsOnAladin');
         
         // Enable the detailed view button if stars were found
         const viewButton = document.getElementById('view-results-button');
         if (viewButton) viewButton.disabled = this.starsInFov.length === 0;
+        console.timeEnd('findStarsInFov');
     }
 
     filterStars() {
@@ -390,6 +419,142 @@ class SkyViewer {
               <div class="star-catalog">${star.catalog}</div>${extra}</div>`;
         }).join('');
         container.querySelectorAll('.star-item').forEach((el, idx) => el.addEventListener('click', () => this.selectStar(idx)));
+    }
+
+    displayStarsAsTable() {
+        const container = document.getElementById('star-list'); 
+        if (!container) return;
+        if (!this.starsInFov.length) { 
+            this.showStatus('No stars found.', 'info'); 
+            return; 
+        }
+
+        // Set display mode
+        this.displayMode = 'table';
+
+        // Build column headers dynamically
+        const baseColumns = ['#', 'RA', 'Dec', 'Sep (")', 'P.A. (°)', 'Catalog'];
+        const allColumns = [...baseColumns, ...this.availableColumns];
+
+        // Create table HTML
+        let tableHTML = '<table class="star-table"><thead><tr>';
+        allColumns.forEach((col, colIndex) => {
+            const isSorted = this.sortColumn === colIndex;
+            const sortIcon = isSorted ? (this.sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
+            tableHTML += `<th data-column="${colIndex}" class="sortable">${col}${sortIcon}</th>`;
+        });
+        tableHTML += '</tr></thead><tbody>';
+
+        // Add rows
+        this.starsInFov.forEach((star, i) => {
+            const isRec = this.isStarRecommended(star.pa);
+            const isSel = i === this.selectedIndex;
+            const rowClass = `${isRec ? 'recommended' : ''} ${isSel ? 'selected' : ''}`.trim();
+            
+            tableHTML += `<tr class="${rowClass}" data-index="${i}">`;
+            tableHTML += `<td class="star-number">${i + 1}</td>`;
+            tableHTML += `<td>${this.formatRA(star.ra)}</td>`;
+            tableHTML += `<td>${this.formatDec(star.dec)}</td>`;
+            tableHTML += `<td>${(star.separation * 60).toFixed(2)}</td>`;
+            tableHTML += `<td>${star.pa.toFixed(1)}</td>`;
+            tableHTML += `<td>${star.catalog || '-'}</td>`;
+            
+            // Add extra columns
+            this.availableColumns.forEach(col => {
+                const val = star.data[col];
+                const displayVal = val != null && val !== '' 
+                    ? (typeof val === 'number' ? val.toFixed(2) : val) 
+                    : '-';
+                tableHTML += `<td>${displayVal}</td>`;
+            });
+            
+            tableHTML += '</tr>';
+        });
+
+        tableHTML += '</tbody></table>';
+        container.innerHTML = tableHTML;
+
+        // Attach click handlers for rows
+        container.querySelectorAll('tr[data-index]').forEach((el, idx) => {
+            el.addEventListener('click', () => this.selectStar(parseInt(el.dataset.index)));
+        });
+
+        // Attach click handlers for sortable column headers
+        container.querySelectorAll('th.sortable').forEach((th) => {
+            th.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent row selection
+                const colIndex = parseInt(th.dataset.column);
+                this.sortTableByColumn(colIndex);
+            });
+        });
+    }
+
+    sortTableByColumn(colIndex) {
+        // Toggle sort direction if clicking same column
+        if (this.sortColumn === colIndex) {
+            this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortColumn = colIndex;
+            this.sortDirection = 'asc';
+        }
+
+        // Define column names for sorting
+        const baseColumns = ['#', 'RA', 'Dec', 'Sep (")', 'P.A. (°)', 'Catalog'];
+        
+        // Get the value for sorting from a star object
+        const getValue = (star, colIndex) => {
+            if (colIndex === 0) return star.index; // #
+            if (colIndex === 1) return star.ra; // RA
+            if (colIndex === 2) return star.dec; // Dec
+            if (colIndex === 3) return star.separation; // Separation
+            if (colIndex === 4) return star.pa; // P.A.
+            if (colIndex === 5) return star.catalog || ''; // Catalog
+            
+            // Extra columns (magnitude bands, etc.)
+            const extraColIndex = colIndex - baseColumns.length;
+            if (extraColIndex >= 0 && extraColIndex < this.availableColumns.length) {
+                const colName = this.availableColumns[extraColIndex];
+                const val = star.data[colName];
+                return val != null ? val : '';
+            }
+            return '';
+        };
+
+        // Store original indices before sorting
+        this.starsInFov.forEach((star, i) => {
+            star.index = i;
+        });
+
+        // Sort the stars array
+        this.starsInFov.sort((a, b) => {
+            let valA = getValue(a, colIndex);
+            let valB = getValue(b, colIndex);
+
+            // Handle numeric vs string comparison
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return this.sortDirection === 'asc' ? valA - valB : valB - valA;
+            } else {
+                valA = String(valA);
+                valB = String(valB);
+                if (this.sortDirection === 'asc') {
+                    return valA.localeCompare(valB);
+                } else {
+                    return valB.localeCompare(valA);
+                }
+            }
+        });
+
+        // Update selected index if a star is selected
+        if (this.selectedStar) {
+            const newIndex = this.starsInFov.findIndex(star => 
+                star.ra === this.selectedStar.ra && star.dec === this.selectedStar.dec
+            );
+            this.selectedIndex = newIndex;
+        }
+
+        // Redisplay the table
+        this.displayStarsAsTable();
+        this.plotStarsOnAladin();
     }
 
     plotStarsOnAladin() {
@@ -426,6 +591,20 @@ class SkyViewer {
         });
 
         this.starCatalog.addSources(sources);
+        
+        // Force Aladin to redraw the view to reflect changes
+        try {
+            this.aladin.view.requestRedraw();
+        } catch (e) {
+            // Fallback: trigger a minimal view change to force redraw
+            try {
+                const currentFov = this.aladin.getFov();
+                this.aladin.setFoV(currentFov[0]);
+            } catch (e2) {
+                console.warn('Could not force Aladin redraw:', e2);
+            }
+        }
+        
         this.attachCanvasHitTestForMainAladin();
     }
 
@@ -438,10 +617,15 @@ class SkyViewer {
             this.selectedStar = this.starsInFov[index];
         }
 
-        this.displayStars();
+        // Use the appropriate display method based on current mode
+        if (this.displayMode === 'table') {
+            this.displayStarsAsTable();
+        } else {
+            this.displayStars();
+        }
         this.plotStarsOnAladin();
 
-        ['confirm-button', 'show-mimizuku-button', 'check-observability-button'].forEach(id => {
+        ['confirm-button', 'show-mimizuku-button', 'check-observability-button', 'check-observability-button-viewer'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.disabled = (this.selectedIndex < 0);
         });
@@ -803,27 +987,39 @@ class SkyViewer {
 
     // ---------- Navigation ----------
     navigateToViewer() {
-        if (!this.targetCoord || !this.catalogs.length) return;
+        if (!this.targetCoord || !this.starsInFov.length) return;
         
         // Store current state in sessionStorage
+        // Only store the filtered stars (starsInFov) instead of full catalogs to avoid QuotaExceededError
         const viewerData = {
             targetCoord: this.targetCoord,
             targetInput: document.getElementById('target-input')?.value || '',
             instPA: this.instPA,
             paTolerance: this.paTolerance,
             paRestrict: this.paRestrict,
-            catalogs: this.catalogs
+            starsInFov: this.starsInFov,
+            allStarsInFov: this.allStarsInFov,
+            availableColumns: this.availableColumns,
+            magFilter: this.magFilter
         };
         
-        sessionStorage.setItem('viewerData', JSON.stringify(viewerData));
-        
-        // Navigate to viewer page
-        window.location.href = 'viewer.html';
+        try {
+            sessionStorage.setItem('viewerData', JSON.stringify(viewerData));
+            // Navigate to viewer page
+            window.location.href = 'viewer.html';
+        } catch (e) {
+            // Handle quota exceeded error
+            if (e.name === 'QuotaExceededError') {
+                alert('データサイズが大きすぎます。等級フィルターを使用して星の数を減らしてください。');
+            } else {
+                alert('エラーが発生しました: ' + e.message);
+            }
+        }
     }
 
     // ---------- Observability (unchanged) ----------
     async checkObservability(){if(!this.targetCoord||!this.selectedStar){const r=document.getElementById('observability-results');if(r)r.innerHTML='<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Select target & guide first.</div>';return}const dateString=document.getElementById('obs-date')?.value,locationKey=document.getElementById('obs-location')?.value,resultsDiv=document.getElementById('observability-results');if(!dateString){if(resultsDiv)resultsDiv.innerHTML='<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Select a date.</div>';return}if(resultsDiv)resultsDiv.innerHTML='<div style="color:#aaa;padding:8px;">Checking...</div>';try{const loc=this.getObservatoryLocation(locationKey),obsDate=new Date(dateString+'T12:00:00'),sunTimes=this.findSunriseSunset(obsDate,loc),tInfo=this.checkTargetObservability(this.targetCoord.ra,this.targetCoord.dec,obsDate,loc),gInfo=this.checkTargetObservability(this.selectedStar.ra,this.selectedStar.dec,obsDate,loc);this.displayObservabilityResults({location:loc,sun:{sunrise:sunTimes.sunrise?.toISOString()||null,sunset:sunTimes.sunset?.toISOString()||null},twilight:{evening_astronomical:sunTimes.evening_twilight?.toISOString()||null,morning_astronomical:sunTimes.morning_twilight?.toISOString()||null},target_info:{...tInfo}},{location:loc,sun:sunTimes,twilight:sunTimes.twilight,target_info:{...gInfo}})}catch(e){console.error('Observability error:',e);if(resultsDiv)resultsDiv.innerHTML=`<div style="color:#f88;padding:8px;background:#331;border-radius:4px;">Error: ${e.message}</div>`}}
-    displayObservabilityResults(targetData,guideData){const r=document.getElementById('observability-results');if(!r)return;const fmt=iso=>{if(!iso)return'N/A';const p=iso.split('T');return p.length<2?'N/A':p[1].split('.')[0]||'N/A'},okT=targetData.target_info.observable,okG=guideData.target_info.observable,both=okT&&okG,color=both?'#4a4':'#a44',status=both?'✓ Observable':'✗ Not Observable';r.innerHTML=`<div style="background:#333;padding:10px;border-radius:4px;border:2px solid ${color};"><div style="font-weight:bold;color:${color};margin-bottom:8px;font-size:14px;">${status}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Night Times (${targetData.location.name}):</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Sunset: ${fmt(targetData.sun.sunset)}<br>Twilight: ${fmt(targetData.twilight.evening_astronomical)} to ${fmt(targetData.twilight.morning_astronomical)}<br>Sunrise: ${fmt(targetData.sun.sunrise)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Target:</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Observable: ${okT?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(targetData.target_info.best_time)}<br>Best Alt: ${targetData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(targetData.target_info.rise_time)} / ${fmt(targetData.target_info.set_time)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Guide Star:</strong></div><div style="font-size:11px;margin-left:8px;">Observable: ${okG?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(guideData.target_info.best_time)}<br>Best Alt: ${guideData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(guideData.target_info.rise_time)} / ${fmt(guideData.target_info.set_time)}</div></div>`}
+    displayObservabilityResults(targetData,guideData,resultsDivId='observability-results'){const r=document.getElementById(resultsDivId);if(!r)return;const fmt=iso=>{if(!iso)return'N/A';const p=iso.split('T');return p.length<2?'N/A':p[1].split('.')[0]||'N/A'},okT=targetData.target_info.observable,okG=guideData.target_info.observable,both=okT&&okG,color=both?'#4a4':'#a44',status=both?'✓ Observable':'✗ Not Observable';r.innerHTML=`<div style="background:#333;padding:10px;border-radius:4px;border:2px solid ${color};"><div style="font-weight:bold;color:${color};margin-bottom:8px;font-size:14px;">${status}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Night Times (${targetData.location.name}):</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Sunset: ${fmt(targetData.sun.sunset)}<br>Twilight: ${fmt(targetData.twilight.evening_astronomical)} to ${fmt(targetData.twilight.morning_astronomical)}<br>Sunrise: ${fmt(targetData.sun.sunrise)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Target:</strong></div><div style="font-size:11px;margin-left:8px;margin-bottom:8px;">Observable: ${okT?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(targetData.target_info.best_time)}<br>Best Alt: ${targetData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(targetData.target_info.rise_time)} / ${fmt(targetData.target_info.set_time)}</div><div style="font-size:11px;color:#aaa;margin-bottom:6px;"><strong>Guide Star:</strong></div><div style="font-size:11px;margin-left:8px;">Observable: ${okG?'✓ Yes':'✗ No'}<br>Best Time: ${fmt(guideData.target_info.best_time)}<br>Best Alt: ${guideData.target_info.best_altitude.toFixed(1)}°<br>Rise/Set: ${fmt(guideData.target_info.rise_time)} / ${fmt(guideData.target_info.set_time)}</div></div>`}
     getObservatoryLocation(key){const m={subaru:{name:'Subaru',lat:19.826,lon:-155.4747},keck:{name:'Keck',lat:19.8283,lon:-155.4783},magellan:{name:'Magellan',lat:-29.0146,lon:-70.6926},vlt:{name:'VLT',lat:-24.6275,lon:-70.4044}};return m[key]||m.subaru}
     dateToJulianDate(d){return d.getTime()/864e5+2440587.5}
     julianDateToGMST(jd){const T=(jd-2451545)/36525;let g=280.46061837+360.98564736629*(jd-2451545)+T*T*(.000387933-T/3871e4);return(g%=360)<0?g+360:g}
