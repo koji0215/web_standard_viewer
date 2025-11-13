@@ -522,7 +522,15 @@
                     window.skyViewer.instPA = data.instPA;
                     window.skyViewer.paTolerance = data.paTolerance;
                     window.skyViewer.paRestrict = data.paRestrict;
-                    window.skyViewer.catalogs = data.catalogs;
+                    
+                    // Restore stars from stored data instead of reloading catalogs
+                    window.skyViewer.starsInFov = data.starsInFov || [];
+                    window.skyViewer.allStarsInFov = data.allStarsInFov || [];
+                    window.skyViewer.availableColumns = data.availableColumns || [];
+                    window.skyViewer.magFilter = data.magFilter || { band: '', min: null, max: null };
+                    
+                    // Update mag filter dropdown
+                    window.skyViewer.updateMagFilterDropdown();
                     
                     // Update display
                     document.getElementById('target-display').textContent = 
@@ -535,8 +543,9 @@
                     window.skyViewer.drawFovCircle();
                     window.skyViewer.drawRecommendedWedges();
                     
-                    // Restore stars
-                    window.skyViewer.findStarsInFov();
+                    // Display and plot the restored stars
+                    window.skyViewer.displayStars();
+                    window.skyViewer.plotStarsOnAladin();
                 } else {
                     setTimeout(initViewer, 500);
                 }

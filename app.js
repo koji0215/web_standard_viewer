@@ -803,22 +803,34 @@ class SkyViewer {
 
     // ---------- Navigation ----------
     navigateToViewer() {
-        if (!this.targetCoord || !this.catalogs.length) return;
+        if (!this.targetCoord || !this.starsInFov.length) return;
         
         // Store current state in sessionStorage
+        // Only store the filtered stars (starsInFov) instead of full catalogs to avoid QuotaExceededError
         const viewerData = {
             targetCoord: this.targetCoord,
             targetInput: document.getElementById('target-input')?.value || '',
             instPA: this.instPA,
             paTolerance: this.paTolerance,
             paRestrict: this.paRestrict,
-            catalogs: this.catalogs
+            starsInFov: this.starsInFov,
+            allStarsInFov: this.allStarsInFov,
+            availableColumns: this.availableColumns,
+            magFilter: this.magFilter
         };
         
-        sessionStorage.setItem('viewerData', JSON.stringify(viewerData));
-        
-        // Navigate to viewer page
-        window.location.href = 'viewer.html';
+        try {
+            sessionStorage.setItem('viewerData', JSON.stringify(viewerData));
+            // Navigate to viewer page
+            window.location.href = 'viewer.html';
+        } catch (e) {
+            // Handle quota exceeded error
+            if (e.name === 'QuotaExceededError') {
+                alert('データサイズが大きすぎます。等級フィルターを使用して星の数を減らしてください。');
+            } else {
+                alert('エラーが発生しました: ' + e.message);
+            }
+        }
     }
 
     // ---------- Observability (unchanged) ----------
