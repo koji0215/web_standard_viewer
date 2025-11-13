@@ -23,6 +23,11 @@ class SkyViewer {
         this.availableColumns = [];
         this.displayColumns = ['separation', 'pa'];
 
+        // Display mode: 'cards' or 'table'
+        this.displayMode = 'cards';
+        this.sortColumn = null;
+        this.sortDirection = 'asc';
+
         // MIMIZUKU dual-field / PNG
         this.mimizukuAladin = null;
         this.mimizukuPNGMode = false;
@@ -400,14 +405,19 @@ class SkyViewer {
             return; 
         }
 
+        // Set display mode
+        this.displayMode = 'table';
+
         // Build column headers dynamically
         const baseColumns = ['#', 'RA', 'Dec', 'Sep (")', 'P.A. (°)', 'Catalog'];
         const allColumns = [...baseColumns, ...this.availableColumns];
 
         // Create table HTML
         let tableHTML = '<table class="star-table"><thead><tr>';
-        allColumns.forEach(col => {
-            tableHTML += `<th>${col}</th>`;
+        allColumns.forEach((col, colIndex) => {
+            const isSorted = this.sortColumn === colIndex;
+            const sortIcon = isSorted ? (this.sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
+            tableHTML += `<th data-column="${colIndex}" class="sortable">${col}${sortIcon}</th>`;
         });
         tableHTML += '</tr></thead><tbody>';
 
@@ -440,10 +450,87 @@ class SkyViewer {
         tableHTML += '</tbody></table>';
         container.innerHTML = tableHTML;
 
-        // Attach click handlers
+        // Attach click handlers for rows
         container.querySelectorAll('tr[data-index]').forEach((el, idx) => {
             el.addEventListener('click', () => this.selectStar(parseInt(el.dataset.index)));
         });
+
+        // Attach click handlers for sortable column headers
+        container.querySelectorAll('th.sortable').forEach((th) => {
+            th.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent row selection
+                const colIndex = parseInt(th.dataset.column);
+                this.sortTableByColumn(colIndex);
+            });
+        });
+    }
+
+    sortTableByColumn(colIndex) {
+        // Toggle sort direction if clicking same column
+        if (this.sortColumn === colIndex) {
+            this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortColumn = colIndex;
+            this.sortDirection = 'asc';
+        }
+
+        // Define column names for sorting
+        const baseColumns = ['#', 'RA', 'Dec', 'Sep (")', 'P.A. (°)', 'Catalog'];
+        
+        // Get the value for sorting from a star object
+        const getValue = (star, colIndex) => {
+            if (colIndex === 0) return star.index; // #
+            if (colIndex === 1) return star.ra; // RA
+            if (colIndex === 2) return star.dec; // Dec
+            if (colIndex === 3) return star.separation; // Separation
+            if (colIndex === 4) return star.pa; // P.A.
+            if (colIndex === 5) return star.catalog || ''; // Catalog
+            
+            // Extra columns (magnitude bands, etc.)
+            const extraColIndex = colIndex - baseColumns.length;
+            if (extraColIndex >= 0 && extraColIndex < this.availableColumns.length) {
+                const colName = this.availableColumns[extraColIndex];
+                const val = star.data[colName];
+                return val != null ? val : '';
+            }
+            return '';
+        };
+
+        // Store original indices before sorting
+        this.starsInFov.forEach((star, i) => {
+            star.index = i;
+        });
+
+        // Sort the stars array
+        this.starsInFov.sort((a, b) => {
+            let valA = getValue(a, colIndex);
+            let valB = getValue(b, colIndex);
+
+            // Handle numeric vs string comparison
+            if (typeof valA === 'number' && typeof valB === 'number') {
+                return this.sortDirection === 'asc' ? valA - valB : valB - valA;
+            } else {
+                valA = String(valA);
+                valB = String(valB);
+                if (this.sortDirection === 'asc') {
+                    return valA.localeCompare(valB);
+                } else {
+                    return valB.localeCompare(valA);
+                }
+            }
+        });
+
+        // Update selected index if a star is selected
+        if (this.selectedStar) {
+            const newIndex = this.starsInFov.findIndex(star => 
+                star.ra === this.selectedStar.ra && star.dec === this.selectedStar.dec
+            );
+            this.selectedIndex = newIndex;
+        }
+
+        // Redisplay the table
+        this.displayStarsAsTable();
+        this.plotStarsOnAladin();
     }
 
     plotStarsOnAladin() {
@@ -506,7 +593,12 @@ class SkyViewer {
             this.selectedStar = this.starsInFov[index];
         }
 
-        this.displayStars();
+        // Use the appropriate display method based on current mode
+        if (this.displayMode === 'table') {
+            this.displayStarsAsTable();
+        } else {
+            this.displayStars();
+        }
         this.plotStarsOnAladin();
 
         ['confirm-button', 'show-mimizuku-button', 'check-observability-button'].forEach(id => {
