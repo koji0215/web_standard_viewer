@@ -1,0 +1,10 @@
+# Python 3.13+ 対応版
+# より新しいバージョンを使用してPython 3.13との互換性を確保
+
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+astroquery>=0.4.7
+astropy>=6.0.0  # Python 3.13対応
+numpy>=1.26.0
+pandas>=2.1.0

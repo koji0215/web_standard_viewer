@@ -34,9 +34,18 @@ source venv/bin/activate  # Linux/Mac
 # または
 venv\Scripts\activate  # Windows
 
+# Pythonバージョンを確認
+python --version
+
 # 依存パッケージをインストール
+# Python 3.13以降の場合（推奨）
 pip install -r requirements.txt
+
+# Python 3.9-3.12の場合（またはエラーが発生する場合）
+# pip install -r requirements-py39-312.txt
 ```
+
+**注意**: Python 3.13では、古いバージョンのastropyがビルドエラーを起こす可能性があります。その場合は、`requirements.txt`を使用してください（astropy 6.0以降を使用）。Python 3.9-3.12を使用している場合は、`requirements-py39-312.txt`でも動作します。
 
 ### 2. バックエンドサーバーの起動
 
@@ -182,7 +191,33 @@ table = Irsa.query_tap(query)
 
 ## トラブルシューティング
 
-### バックエンドが起動しない
+### よくある問題と解決方法
+
+#### 1. pip install でエラーが発生する
+
+**症状**: `astropy==5.3.4` のビルドエラー（特にPython 3.13以降）
+
+**原因**: Python 3.13は新しいバージョンで、古いastropyにはプリビルドされたホイールがありません。
+
+**解決方法**:
+
+```bash
+# 方法1: デフォルトのrequirements.txtを使用（推奨）
+# これはastropy 6.0以降を使用し、Python 3.13に対応しています
+pip install -r requirements.txt
+
+# 方法2: Python 3.9-3.12を使用している場合
+pip install -r requirements-py39-312.txt
+
+# 方法3: 個別にインストール
+pip install --upgrade pip setuptools wheel
+pip install fastapi uvicorn[standard] pydantic
+pip install numpy pandas
+pip install astropy  # 最新版を自動選択
+pip install astroquery
+```
+
+#### 2. バックエンドが起動しない
 
 ```bash
 # 依存パッケージが正しくインストールされているか確認
@@ -195,7 +230,7 @@ lsof -i :8000
 uvicorn app:app --port 8001
 ```
 
-### フロントエンドからAPIにアクセスできない
+#### 3. フロントエンドからAPIにアクセスできない
 
 1. バックエンドが起動しているか確認: http://localhost:8000
 2. ブラウザのコンソールでCORSエラーを確認
