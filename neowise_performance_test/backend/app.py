@@ -43,6 +43,14 @@ class CatalogEntry(BaseModel):
     allwise_id: Optional[str] = None
 
 
+class ProgressUpdate(BaseModel):
+    """進捗更新"""
+    current: int
+    total: int
+    current_star: str
+    message: str
+
+
 class TestRequest(BaseModel):
     """テストリクエスト"""
     catalog_entries: List[CatalogEntry] = Field(..., description="テスト対象の天体リスト")
@@ -162,8 +170,11 @@ async def test_performance(request: TestRequest):
     """
     results = []
     total_start_time = time.time()
+    total_entries = len(request.catalog_entries)
     
-    for entry in request.catalog_entries:
+    for idx, entry in enumerate(request.catalog_entries, 1):
+        print(f"Processing {idx}/{total_entries}: {entry.source_id}")
+        
         try:
             if request.method == "query_region":
                 # query_regionを使用
@@ -194,8 +205,10 @@ async def test_performance(request: TestRequest):
                 num_observations=num_obs,
                 success=True
             ))
+            print(f"  ✓ Success: {num_obs} observations in {query_time:.2f}s")
             
         except Exception as e:
+            print(f"  ✗ Error: {str(e)}")
             results.append(TestResult(
                 source_id=entry.source_id,
                 ra=entry.ra,

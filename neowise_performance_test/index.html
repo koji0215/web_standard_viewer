@@ -273,6 +273,44 @@
             </div>
 
             <div id="catalog-status"></div>
+            
+            <!-- カラムマッピング -->
+            <div id="column-mapping-section" style="display: none; margin-top: 20px; padding: 15px; background-color: #1a1a1a; border-radius: 4px;">
+                <h3 style="margin-top: 0; color: #4CAF50;">カラムマッピング</h3>
+                <p style="color: #aaa;">カタログファイルのカラムを以下の項目にマッピングしてください：</p>
+                
+                <div class="input-group">
+                    <label for="ra-column">RA（赤経）のカラム名</label>
+                    <select id="ra-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- 選択してください --</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="dec-column">DEC（赤緯）のカラム名</label>
+                    <select id="dec-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- 選択してください --</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="allwise-column">AllWISE IDのカラム名（オプション）</label>
+                    <select id="allwise-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- なし（座標のみで検索） --</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="source-column">Source ID のカラム名（オプション）</label>
+                    <select id="source-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- 自動生成 --</option>
+                    </select>
+                </div>
+                
+                <div class="button-group">
+                    <button class="primary" onclick="applyColumnMapping()">カラムマッピングを適用</button>
+                </div>
+            </div>
         </div>
 
         <!-- テスト実行 -->
@@ -294,6 +332,18 @@
             </div>
 
             <div id="test-status"></div>
+            
+            <!-- 進捗表示 -->
+            <div id="progress-section" style="display: none; margin-top: 15px; padding: 15px; background-color: #1a1a1a; border-radius: 4px;">
+                <h3 style="margin-top: 0; color: #4CAF50;">テスト進行状況</h3>
+                <div style="margin-bottom: 10px;">
+                    <div style="background-color: #333; height: 30px; border-radius: 4px; overflow: hidden; position: relative;">
+                        <div id="progress-bar" style="background-color: #4CAF50; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                        <div id="progress-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; color: #fff;"></div>
+                    </div>
+                </div>
+                <div id="progress-details" style="color: #aaa; font-size: 14px;"></div>
+            </div>
 
             <div class="loading" id="loading">
                 <div class="spinner"></div>
@@ -322,6 +372,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script>
         let catalogData = [];
+        let rawCatalogData = [];
+        let columnMapping = {
+            ra: null,
+            dec: null,
+            allwise_id: null,
+            source_id: null
+        };
         let testResults = {
             query_region: null,
             query_tap: null
@@ -336,7 +393,6 @@
 
         function loadCatalog() {
             const fileInput = document.getElementById('catalog-file');
-            const numStars = parseInt(document.getElementById('num-stars').value);
 
             if (!fileInput.files || !fileInput.files[0]) {
                 showStatus('catalog-status', 'カタログファイルを選択してください', 'error');
@@ -355,49 +411,127 @@
                         return;
                     }
 
-                    // 必要なカラムがあるか確認
-                    const firstRow = results.data[0];
-                    if (!('ra' in firstRow) || !('dec' in firstRow)) {
-                        showStatus('catalog-status', 'raまたはdecカラムが見つかりません', 'error');
-                        return;
-                    }
-
-                    // numStars個だけ抽出（ランダムサンプリング）
-                    const validData = results.data.filter(row => 
-                        row.ra != null && row.dec != null && !isNaN(row.ra) && !isNaN(row.dec)
+                    rawCatalogData = results.data.filter(row => 
+                        row && Object.keys(row).length > 0
                     );
 
-                    if (validData.length === 0) {
+                    if (rawCatalogData.length === 0) {
                         showStatus('catalog-status', '有効なデータが見つかりません', 'error');
                         return;
                     }
 
-                    // ランダムにサンプリング
-                    const shuffled = validData.sort(() => 0.5 - Math.random());
-                    catalogData = shuffled.slice(0, Math.min(numStars, shuffled.length));
-
-                    // カタログエントリーを準備
-                    catalogData = catalogData.map((row, index) => ({
-                        source_id: row.Source || row.source_id || `Star_${index + 1}`,
-                        ra: row.ra,
-                        dec: row.dec,
-                        allwise_id: row.AllWISE_ID || row.allwise_id || null
-                    }));
-
+                    // カラム名を抽出
+                    const columns = Object.keys(rawCatalogData[0]);
+                    
+                    // カラムマッピングUIを表示
+                    setupColumnMapping(columns);
+                    
                     showStatus('catalog-status', 
-                        `✓ ${catalogData.length}個の天体を読み込みました`, 
+                        `✓ ${rawCatalogData.length}行のデータを読み込みました。カラムマッピングを設定してください。`, 
                         'success'
                     );
-
-                    // テストボタンを有効化
-                    document.getElementById('test-region-btn').disabled = false;
-                    document.getElementById('test-tap-btn').disabled = false;
-                    document.getElementById('test-both-btn').disabled = false;
                 },
                 error: function(error) {
                     showStatus('catalog-status', `エラー: ${error.message}`, 'error');
                 }
             });
+        }
+
+        function setupColumnMapping(columns) {
+            const raSelect = document.getElementById('ra-column');
+            const decSelect = document.getElementById('dec-column');
+            const allwiseSelect = document.getElementById('allwise-column');
+            const sourceSelect = document.getElementById('source-column');
+            
+            // セレクトボックスをクリア
+            [raSelect, decSelect, allwiseSelect, sourceSelect].forEach(select => {
+                const firstOption = select.options[0];
+                select.innerHTML = '';
+                select.appendChild(firstOption);
+            });
+            
+            // カラムを追加
+            columns.forEach(col => {
+                [raSelect, decSelect, allwiseSelect, sourceSelect].forEach(select => {
+                    const option = document.createElement('option');
+                    option.value = col;
+                    option.textContent = col;
+                    select.appendChild(option);
+                });
+            });
+            
+            // 自動推測
+            columns.forEach(col => {
+                const colLower = col.toLowerCase();
+                if (colLower === 'ra' || colLower === 'r.a.' || colLower === 'right_ascension') {
+                    raSelect.value = col;
+                }
+                if (colLower === 'dec' || colLower === 'decl' || colLower === 'declination') {
+                    decSelect.value = col;
+                }
+                if (colLower.includes('allwise') && colLower.includes('id')) {
+                    allwiseSelect.value = col;
+                }
+                if (colLower === 'source' || colLower === 'source_id' || colLower === 'name' || colLower === 'id') {
+                    sourceSelect.value = col;
+                }
+            });
+            
+            document.getElementById('column-mapping-section').style.display = 'block';
+        }
+
+        function applyColumnMapping() {
+            const raCol = document.getElementById('ra-column').value;
+            const decCol = document.getElementById('dec-column').value;
+            const allwiseCol = document.getElementById('allwise-column').value;
+            const sourceCol = document.getElementById('source-column').value;
+            
+            if (!raCol || !decCol) {
+                showStatus('catalog-status', 'RAとDECのカラムは必須です', 'error');
+                return;
+            }
+            
+            columnMapping = {
+                ra: raCol,
+                dec: decCol,
+                allwise_id: allwiseCol || null,
+                source_id: sourceCol || null
+            };
+            
+            const numStars = parseInt(document.getElementById('num-stars').value);
+            
+            // データを変換
+            const validData = rawCatalogData.filter(row => 
+                row[raCol] != null && row[decCol] != null && 
+                !isNaN(row[raCol]) && !isNaN(row[decCol])
+            );
+
+            if (validData.length === 0) {
+                showStatus('catalog-status', '有効なRA/DECデータが見つかりません', 'error');
+                return;
+            }
+
+            // ランダムにサンプリング
+            const shuffled = validData.sort(() => 0.5 - Math.random());
+            const sampled = shuffled.slice(0, Math.min(numStars, shuffled.length));
+
+            // カタログエントリーを準備
+            catalogData = sampled.map((row, index) => ({
+                source_id: sourceCol && row[sourceCol] ? String(row[sourceCol]) : `Star_${index + 1}`,
+                ra: parseFloat(row[raCol]),
+                dec: parseFloat(row[decCol]),
+                allwise_id: allwiseCol && row[allwiseCol] ? String(row[allwiseCol]) : null
+            }));
+
+            showStatus('catalog-status', 
+                `✓ ${catalogData.length}個の天体を準備しました（RA: ${raCol}, DEC: ${decCol}${allwiseCol ? ', AllWISE ID: ' + allwiseCol : ''}）`, 
+                'success'
+            );
+
+            // テストボタンを有効化
+            document.getElementById('test-region-btn').disabled = false;
+            document.getElementById('test-tap-btn').disabled = false;
+            document.getElementById('test-both-btn').disabled = false;
         }
 
         async function runTest(method) {
@@ -408,6 +542,7 @@
 
             // UIを更新
             document.getElementById('loading').classList.add('active');
+            document.getElementById('progress-section').style.display = 'block';
             showStatus('test-status', `${method} でテスト実行中...`, 'info');
             
             // ボタンを無効化
@@ -415,27 +550,78 @@
             document.getElementById('test-tap-btn').disabled = true;
             document.getElementById('test-both-btn').disabled = true;
 
+            // 進捗をリセット
+            updateProgress(0, catalogData.length, '準備中...');
+
             try {
-                const response = await fetch(`${API_URL}/test-performance`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        catalog_entries: catalogData,
-                        method: method
-                    })
-                });
+                // 1つずつ処理して進捗を表示
+                const results = [];
+                const totalEntries = catalogData.length;
+                const startTime = Date.now();
+                
+                for (let i = 0; i < totalEntries; i++) {
+                    const entry = catalogData[i];
+                    updateProgress(i, totalEntries, `${entry.source_id} を処理中...`);
+                    
+                    try {
+                        const response = await fetch(`${API_URL}/test-performance`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                catalog_entries: [entry],
+                                method: method
+                            })
+                        });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const result = await response.json();
+                        if (result.results && result.results.length > 0) {
+                            results.push(result.results[0]);
+                        }
+                    } catch (error) {
+                        console.error(`Error processing ${entry.source_id}:`, error);
+                        results.push({
+                            source_id: entry.source_id,
+                            ra: entry.ra,
+                            dec: entry.dec,
+                            allwise_id: entry.allwise_id,
+                            query_time: 0,
+                            num_observations: 0,
+                            success: false,
+                            error_message: error.message
+                        });
+                    }
                 }
-
-                const result = await response.json();
-                testResults[method] = result;
+                
+                updateProgress(totalEntries, totalEntries, '完了！');
+                
+                // 統計を計算
+                const totalTime = (Date.now() - startTime) / 1000;
+                const successfulResults = results.filter(r => r.success);
+                const queryTimes = successfulResults.map(r => r.query_time);
+                
+                const avgTime = queryTimes.length > 0 ? queryTimes.reduce((a, b) => a + b, 0) / queryTimes.length : 0;
+                const minTime = queryTimes.length > 0 ? Math.min(...queryTimes) : 0;
+                const maxTime = queryTimes.length > 0 ? Math.max(...queryTimes) : 0;
+                
+                testResults[method] = {
+                    method: method,
+                    total_time: totalTime,
+                    avg_time_per_star: avgTime,
+                    min_time: minTime,
+                    max_time: maxTime,
+                    successful_queries: successfulResults.length,
+                    failed_queries: results.length - successfulResults.length,
+                    results: results
+                };
 
                 showStatus('test-status', 
-                    `✓ ${method} のテストが完了しました（合計: ${result.total_time.toFixed(2)}秒）`, 
+                    `✓ ${method} のテストが完了しました（合計: ${totalTime.toFixed(2)}秒、成功: ${successfulResults.length}/${totalEntries}）`, 
                     'success'
                 );
 
@@ -453,6 +639,17 @@
                 document.getElementById('test-tap-btn').disabled = false;
                 document.getElementById('test-both-btn').disabled = false;
             }
+        }
+
+        function updateProgress(current, total, message) {
+            const percentage = total > 0 ? (current / total) * 100 : 0;
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const progressDetails = document.getElementById('progress-details');
+            
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = `${current} / ${total} (${percentage.toFixed(0)}%)`;
+            progressDetails.textContent = message;
         }
 
         async function runBothTests() {
