@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASASSN パフォーマンステスト</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #1e3c72;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        h2 {
+            color: #2a5298;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            color: #444;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .info-box {
+            background: #e8f4f8;
+            border-left: 4px solid #2196F3;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info-box h3 {
+            color: #1976D2;
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+
+        .info-box code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .section {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input[type="file"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="file"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: background 0.3s, transform 0.1s;
+            margin-right: 10px;
+            margin-top: 10px;
+        }
+
+        button:hover:not(:disabled) {
+            background: #1976D2;
+            transform: translateY(-1px);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+
+        .status.info {
+            background: #e3f2fd;
+            color: #1976D2;
+            border-left: 4px solid #2196F3;
+        }
+
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #f44336;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #2196F3;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-section {
+            display: none;
+            margin: 20px 0;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background-color: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #2196F3 0%, #21CBF3 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .progress-text {
+            text-align: center;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .progress-details {
+            text-align: center;
+            font-size: 0.9em;
+            color: #777;
+            margin-top: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f9f9f9;
+        }
+
+        .success-text {
+            color: #4CAF50;
+        }
+
+        .error-text {
+            color: #f44336;
+        }
+
+        .column-mapping {
+            display: none;
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .column-mapping.active {
+            display: block;
+        }
+
+        .mapping-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ASASSN パフォーマンステスト</h1>
+
+        <div class="info-box">
+            <h3>🎯 テストの目的</h3>
+            <p>pyasassnを使用してASASSN時系列データの取得時間を計測し、実用性を評価します：</p>
+            <ul>
+                <li><strong>Gaia ID検索</strong>: ADQLクエリを使用（Gaia IDがある場合）</li>
+                <li><strong>座標検索</strong>: cone_searchを使用（Gaia IDがない場合）</li>
+            </ul>
+            <p><strong>API Endpoint:</strong> <code>http://localhost:8000</code></p>
+        </div>
+
+        <div class="info-box" style="background-color: #fff3e0; border-left-color: #ff9800;">
+            <h3>⚠️ 重要な注意事項</h3>
+            <p><strong>ASASSNサーバーについて:</strong></p>
+            <ul>
+                <li>ASASSNは現在も観測を行っているため、データが随時更新されます</li>
+                <li>pyasassnはASASSN Sky Patrolサービスにアクセスします</li>
+                <li>初回アクセス時は少し時間がかかる場合があります</li>
+                <li>テスト対象の星数を少なく（3-5個）から始めることを推奨します</li>
+                <li>Gaia IDがある場合、検索が効率的になります</li>
+            </ul>
+        </div>
+
+        <!-- カタログ読み込み -->
+        <div class="section">
+            <h2>📁 1. カタログの準備</h2>
+            
+            <div class="input-group">
+                <label for="catalog-file">カタログファイル（CSV）</label>
+                <input type="file" id="catalog-file" accept=".csv" />
+            </div>
+
+            <div class="input-group">
+                <label for="sample-size">テストするサンプル数</label>
+                <input type="number" id="sample-size" value="5" min="1" max="100" />
+            </div>
+
+            <div id="load-status"></div>
+        </div>
+
+        <!-- カラムマッピング -->
+        <div class="column-mapping" id="column-mapping">
+            <h3>🔧 カラムマッピング</h3>
+            <p>CSVファイルのカラムとデータ項目を対応付けてください：</p>
+            
+            <div class="mapping-grid">
+                <div class="input-group">
+                    <label for="col-source-id">Source ID（必須）</label>
+                    <select id="col-source-id"></select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="col-ra">RA / 赤経（必須）</label>
+                    <select id="col-ra"></select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="col-dec">DEC / 赤緯（必須）</label>
+                    <select id="col-dec"></select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="col-gaia-id">Gaia ID（オプション）</label>
+                    <select id="col-gaia-id">
+                        <option value="">（なし）</option>
+                    </select>
+                </div>
+            </div>
+
+            <button onclick="applyColumnMapping()">カラムマッピングを適用</button>
+            <div id="mapping-status"></div>
+        </div>
+
+        <!-- テスト実行 -->
+        <div class="section">
+            <h2>🚀 2. テストの実行</h2>
+            
+            <button id="test-btn" onclick="runTest()" disabled>パフォーマンステストを開始</button>
+            
+            <div id="test-status"></div>
+            
+            <div id="progress-section" class="progress-section">
+                <div class="progress-bar-container">
+                    <div id="progress-bar" class="progress-bar">
+                        <span id="progress-text">0%</span>
+                    </div>
+                </div>
+                <div class="progress-details" id="progress-details">準備中...</div>
+            </div>
+            
+            <div id="loading" class="loading">
+                <div class="spinner"></div>
+                <p>処理中です。しばらくお待ちください...</p>
+            </div>
+        </div>
+
+        <!-- 結果表示 -->
+        <div class="section" id="results-section" style="display: none;">
+            <h2>📊 3. テスト結果</h2>
+            
+            <div class="stats-grid" id="stats"></div>
+            
+            <h3>詳細結果</h3>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+        let catalogData = [];
+        let columnMapping = null;
+        let testResults = null;
+
+        // カタログファイルの読み込み
+        document.getElementById('catalog-file').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                parseCSV(text);
+            };
+            reader.readAsText(file);
+        });
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const headers = lines[0].split(',').map(h => h.trim());
+            
+            showStatus('load-status', `CSVファイルを読み込みました（${lines.length - 1}行）`, 'success');
+            
+            // カラムマッピングUIを表示
+            setupColumnMapping(headers);
+        }
+
+        function setupColumnMapping(headers) {
+            const selects = ['col-source-id', 'col-ra', 'col-dec', 'col-gaia-id'];
+            
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                select.innerHTML = '<option value="">（選択してください）</option>';
+                
+                headers.forEach((header, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = header;
+                    select.appendChild(option);
+                });
+            });
+            
+            // 自動検出を試みる
+            autoDetectColumns(headers);
+            
+            document.getElementById('column-mapping').classList.add('active');
+        }
+
+        function autoDetectColumns(headers) {
+            const lowerHeaders = headers.map(h => h.toLowerCase());
+            
+            // Source ID
+            const sourceIdIdx = lowerHeaders.findIndex(h => 
+                h.includes('source') || h.includes('name') || h.includes('id') || h === 'object'
+            );
+            if (sourceIdIdx >= 0) document.getElementById('col-source-id').value = sourceIdIdx;
+            
+            // RA
+            const raIdx = lowerHeaders.findIndex(h => 
+                h === 'ra' || h.includes('r.a.') || h.includes('right') || h.includes('ascension')
+            );
+            if (raIdx >= 0) document.getElementById('col-ra').value = raIdx;
+            
+            // DEC
+            const decIdx = lowerHeaders.findIndex(h => 
+                h === 'dec' || h === 'decl' || h.includes('declination')
+            );
+            if (decIdx >= 0) document.getElementById('col-dec').value = decIdx;
+            
+            // Gaia ID
+            const gaiaIdx = lowerHeaders.findIndex(h => 
+                h.includes('gaia') && h.includes('id')
+            );
+            if (gaiaIdx >= 0) document.getElementById('col-gaia-id').value = gaiaIdx;
+        }
+
+        function applyColumnMapping() {
+            const sourceIdCol = document.getElementById('col-source-id').value;
+            const raCol = document.getElementById('col-ra').value;
+            const decCol = document.getElementById('col-dec').value;
+            const gaiaIdCol = document.getElementById('col-gaia-id').value;
+            
+            if (!sourceIdCol || !raCol || !decCol) {
+                showStatus('mapping-status', 'エラー: Source ID, RA, DECは必須項目です', 'error');
+                return;
+            }
+            
+            columnMapping = {
+                sourceId: parseInt(sourceIdCol),
+                ra: parseInt(raCol),
+                dec: parseInt(decCol),
+                gaiaId: gaiaIdCol ? parseInt(gaiaIdCol) : null
+            };
+            
+            // カタログデータを解析
+            const file = document.getElementById('catalog-file').files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.trim().split('\n');
+                const headers = lines[0].split(',').map(h => h.trim());
+                const sampleSize = parseInt(document.getElementById('sample-size').value);
+                
+                catalogData = [];
+                for (let i = 1; i <= Math.min(sampleSize, lines.length - 1); i++) {
+                    const values = lines[i].split(',').map(v => v.trim());
+                    
+                    const entry = {
+                        source_id: values[columnMapping.sourceId],
+                        ra: parseFloat(values[columnMapping.ra]),
+                        dec: parseFloat(values[columnMapping.dec]),
+                        gaia_id: columnMapping.gaiaId !== null ? values[columnMapping.gaiaId] : null
+                    };
+                    
+                    catalogData.push(entry);
+                }
+                
+                showStatus('mapping-status', 
+                    `✓ カラムマッピング完了！ ${catalogData.length}個の天体をテスト対象として準備しました`, 
+                    'success'
+                );
+                
+                document.getElementById('test-btn').disabled = false;
+            };
+            reader.readAsText(file);
+        }
+
+        async function runTest() {
+            if (catalogData.length === 0) {
+                showStatus('test-status', 'まずカタログを読み込んでカラムマッピングを適用してください', 'error');
+                return;
+            }
+
+            // UIを更新
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('progress-section').style.display = 'block';
+            showStatus('test-status', 'テスト実行中...', 'info');
+            
+            // ボタンを無効化
+            document.getElementById('test-btn').disabled = true;
+
+            // 進捗をリセット
+            updateProgress(0, catalogData.length, '準備中...');
+
+            try {
+                // 1つずつ処理して進捗を表示
+                const results = [];
+                const totalEntries = catalogData.length;
+                const startTime = Date.now();
+                
+                for (let i = 0; i < totalEntries; i++) {
+                    const entry = catalogData[i];
+                    updateProgress(i, totalEntries, `${entry.source_id} を処理中...`);
+                    
+                    try {
+                        const response = await fetch(`${API_URL}/test-performance`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                catalog_entries: [entry]
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const result = await response.json();
+                        if (result.results && result.results.length > 0) {
+                            results.push(result.results[0]);
+                        }
+                    } catch (error) {
+                        console.error(`Error processing ${entry.source_id}:`, error);
+                        results.push({
+                            source_id: entry.source_id,
+                            ra: entry.ra,
+                            dec: entry.dec,
+                            gaia_id: entry.gaia_id,
+                            query_time: 0,
+                            num_lightcurves: 0,
+                            total_datapoints: 0,
+                            success: false,
+                            error_message: error.message
+                        });
+                    }
+                }
+                
+                updateProgress(totalEntries, totalEntries, '完了！');
+                
+                // 統計を計算
+                const totalTime = (Date.now() - startTime) / 1000;
+                const successfulResults = results.filter(r => r.success);
+                const queryTimes = successfulResults.map(r => r.query_time);
+                
+                const avgTime = queryTimes.length > 0 ? queryTimes.reduce((a, b) => a + b, 0) / queryTimes.length : 0;
+                const minTime = queryTimes.length > 0 ? Math.min(...queryTimes) : 0;
+                const maxTime = queryTimes.length > 0 ? Math.max(...queryTimes) : 0;
+                
+                testResults = {
+                    total_time: totalTime,
+                    avg_time_per_star: avgTime,
+                    min_time: minTime,
+                    max_time: maxTime,
+                    successful_queries: successfulResults.length,
+                    failed_queries: results.length - successfulResults.length,
+                    results: results
+                };
+
+                showStatus('test-status', 
+                    `✓ テストが完了しました（合計: ${totalTime.toFixed(2)}秒、成功: ${successfulResults.length}/${totalEntries}）`, 
+                    'success'
+                );
+
+                // 結果を表示
+                displayResults();
+
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('test-status', `エラー: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+                document.getElementById('test-btn').disabled = false;
+            }
+        }
+
+        function updateProgress(current, total, message) {
+            const percentage = total > 0 ? (current / total) * 100 : 0;
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const progressDetails = document.getElementById('progress-details');
+            
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = `${percentage.toFixed(0)}%`;
+            progressDetails.textContent = `${current} / ${total} - ${message}`;
+        }
+
+        function displayResults() {
+            if (!testResults) return;
+
+            // 統計カードを表示
+            const statsHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">合計時間</div>
+                    <div class="stat-value">${testResults.total_time.toFixed(2)}秒</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">平均時間/天体</div>
+                    <div class="stat-value">${testResults.avg_time_per_star.toFixed(2)}秒</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">最短時間</div>
+                    <div class="stat-value">${testResults.min_time.toFixed(2)}秒</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">最長時間</div>
+                    <div class="stat-value">${testResults.max_time.toFixed(2)}秒</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">成功</div>
+                    <div class="stat-value">${testResults.successful_queries}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">失敗</div>
+                    <div class="stat-value">${testResults.failed_queries}</div>
+                </div>
+            `;
+            document.getElementById('stats').innerHTML = statsHTML;
+
+            // 詳細結果テーブル
+            let tableHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Source ID</th>
+                            <th>RA</th>
+                            <th>Dec</th>
+                            <th>Gaia ID</th>
+                            <th>時間(秒)</th>
+                            <th>LC数</th>
+                            <th>データポイント数</th>
+                            <th>状態</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            testResults.results.forEach(result => {
+                const statusClass = result.success ? 'success-text' : 'error-text';
+                const statusText = result.success ? '✓ 成功' : `✗ 失敗: ${result.error_message}`;
+                const gaiaIdText = result.gaia_id || '（なし）';
+                
+                tableHTML += `
+                    <tr>
+                        <td>${result.source_id}</td>
+                        <td>${result.ra.toFixed(6)}</td>
+                        <td>${result.dec.toFixed(6)}</td>
+                        <td>${gaiaIdText}</td>
+                        <td>${result.query_time.toFixed(3)}</td>
+                        <td>${result.num_lightcurves}</td>
+                        <td>${result.total_datapoints}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                    </tr>
+                `;
+            });
+
+            tableHTML += `
+                    </tbody>
+                </table>
+            `;
+
+            document.getElementById('results').innerHTML = tableHTML;
+            document.getElementById('results-section').style.display = 'block';
+        }
+
+        function showStatus(elementId, message, type) {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
