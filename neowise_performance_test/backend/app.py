@@ -91,10 +91,13 @@ def query_neowise_by_region(ra: float, dec: float) -> tuple:
     start_time = time.time()
     
     try:
+        # タイムアウトを設定
+        Irsa.TIMEOUT = 120
+        
         table = Irsa.query_region(
             coord.SkyCoord(ra, dec, unit=(u.deg, u.deg)),
             catalog='neowiser_p1bs_psd',
-            radius='0d0m5s'  # 5秒角
+            radius=5 * u.arcsec  # 5秒角
         )
         query_time = time.time() - start_time
         
@@ -105,14 +108,22 @@ def query_neowise_by_region(ra: float, dec: float) -> tuple:
         
     except Exception as e:
         query_time = time.time() - start_time
-        raise Exception(f"Query failed: {str(e)}")
+        # より詳細なエラーメッセージ
+        error_msg = str(e)
+        if '502' in error_msg or 'Proxy Error' in error_msg:
+            raise Exception(f"IRSA server error (502). Server may be temporarily down or overloaded.")
+        elif 'timeout' in error_msg.lower():
+            raise Exception(f"Query timeout after {query_time:.1f}s. Try reducing search radius or retry later.")
+        else:
+            raise Exception(f"Query failed: {error_msg}")
 
 
 def query_neowise_by_tap(ra: float, dec: float, allwise_id: Optional[str] = None) -> tuple:
     """
     query_tapを使用してNEOWISEデータを取得
-    allwise_idが指定されている場合はallwise_cntrで検索
-    指定されていない場合は座標で検索
+    
+    注意: TAPクエリは複雑で、IRSAのスキーマに依存します。
+    このメソッドは実験的で、query_regionより安定性が低い可能性があります。
     
     Returns:
         (num_observations, query_time)
@@ -120,23 +131,18 @@ def query_neowise_by_tap(ra: float, dec: float, allwise_id: Optional[str] = None
     start_time = time.time()
     
     try:
-        if allwise_id:
-            # AllWISE IDからallwise_cntrを取得（AllWISEカタログを検索）
-            # 簡略化のため、AllWISE IDを直接使用
-            # 実際にはAllWISEカタログでallwise_cntrを取得する必要がある
-            query = f"""
-            SELECT * FROM neowiser_p1bs_psd
-            WHERE allwise_cntr IN (
-                SELECT cntr FROM allwise_p3as_psd
-                WHERE designation = '{allwise_id}'
-            )
-            """
-        else:
-            # 座標で検索（5秒角以内）
-            query = f"""
-            SELECT * FROM neowiser_p1bs_psd
-            WHERE CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, 0.00139)) = 1
-            """
+        # タイムアウトを設定
+        Irsa.TIMEOUT = 120
+        
+        # 座標検索のみをサポート（より安定）
+        # CONTAINS関数を使用した空間検索
+        radius_deg = 5.0 / 3600.0  # 5秒角を度に変換
+        
+        query = f"""
+        SELECT TOP 1000 *
+        FROM neowiser_p1bs_psd
+        WHERE CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, {radius_deg})) = 1
+        """
         
         table = Irsa.query_tap(query)
         query_time = time.time() - start_time
@@ -148,7 +154,17 @@ def query_neowise_by_tap(ra: float, dec: float, allwise_id: Optional[str] = None
         
     except Exception as e:
         query_time = time.time() - start_time
-        raise Exception(f"Query failed: {str(e)}")
+        error_msg = str(e)
+        
+        # エラーメッセージを解析
+        if 'ORA-00942' in error_msg or 'table or view does not exist' in error_msg:
+            raise Exception(f"TAP query failed: Table access error. IRSA TAP service may not support this query format. Recommend using query_region instead.")
+        elif 'BAD_REQUEST' in error_msg:
+            raise Exception(f"TAP query syntax error. The TAP service rejected the query. Try query_region instead.")
+        elif 'timeout' in error_msg.lower():
+            raise Exception(f"Query timeout after {query_time:.1f}s. Try query_region instead.")
+        else:
+            raise Exception(f"Query failed: {error_msg}")
 
 
 @app.get("/")

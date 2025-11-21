@@ -246,10 +246,22 @@
             <h3>🎯 テストの目的</h3>
             <p>NEOWISE時系列データの取得方法を比較し、最適なアプローチを決定します：</p>
             <ul>
-                <li><strong>query_region</strong>: 座標ベースの検索（従来の方法）</li>
-                <li><strong>query_tap</strong>: TAP（Table Access Protocol）を使用した検索（allwise_cntr指定で高速化の可能性）</li>
+                <li><strong>query_region</strong>: 座標ベースの検索（従来の方法、推奨）</li>
+                <li><strong>query_tap</strong>: TAP（Table Access Protocol）を使用した検索（実験的、不安定な場合あり）</li>
             </ul>
             <p><strong>API Endpoint:</strong> <code>http://localhost:8000</code></p>
+        </div>
+
+        <div class="info-box" style="background-color: #7a4d1a;">
+            <h3>⚠️ 重要な注意事項</h3>
+            <p><strong>IRSAサーバーの状態について:</strong></p>
+            <ul>
+                <li>IRSAサーバーは一時的にダウンまたは過負荷になることがあります（502エラー）</li>
+                <li>query_tapは不安定で、テーブルアクセスエラー（ORA-00942）が発生する可能性があります</li>
+                <li><strong>推奨</strong>: まず<strong>query_region</strong>のみをテストしてください</li>
+                <li>エラーが頻発する場合は、時間を置いてから再試行してください</li>
+                <li>テスト対象の星数を少なく（3-5個）から始めることを推奨します</li>
+            </ul>
         </div>
 
         <!-- カタログ読み込み -->

@@ -142,19 +142,11 @@ table = Irsa.query_region(
 ### query_tap（TAP検索）
 
 ```python
-# AllWISE IDがある場合
+# 座標ベースの検索
 query = """
-SELECT * FROM neowiser_p1bs_psd
-WHERE allwise_cntr IN (
-    SELECT cntr FROM allwise_p3as_psd
-    WHERE designation = '{allwise_id}'
-)
-"""
-
-# 座標ベースの場合
-query = """
-SELECT * FROM neowiser_p1bs_psd
-WHERE CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, 0.00139)) = 1
+SELECT TOP 1000 *
+FROM neowiser_p1bs_psd
+WHERE CONTAINS(POINT('ICRS', ra, dec), CIRCLE('ICRS', {ra}, {dec}, {radius_deg})) = 1
 """
 
 table = Irsa.query_tap(query)
@@ -162,8 +154,13 @@ table = Irsa.query_tap(query)
 
 **特徴**:
 - TAP（Table Access Protocol）を使用
-- AllWISE IDで直接検索可能（高速化が期待できる）
 - SQLライクなクエリで柔軟性が高い
+- **注意**: IRSAのTAPサービスは不安定な場合があり、query_regionより信頼性が低い可能性があります
+
+**既知の問題**:
+- `ORA-00942: table or view does not exist` エラーが発生する場合があります
+- IRSAサーバーの負荷状況により502エラーが発生することがあります
+- これらのエラーが頻発する場合は、**query_regionの使用を推奨**します
 
 ## 判断基準
 
@@ -236,15 +233,37 @@ uvicorn app:app --port 8001
 2. ブラウザのコンソールでCORSエラーを確認
 3. `app.py`のCORS設定を確認
 
-### タイムアウトエラー
+#### 4. IRSAクエリエラー
 
+**症状1**: "502 Server Error: Proxy Error"
+
+**原因**: IRSAサーバーが一時的にダウンしているか、過負荷状態です。
+
+**解決方法**:
+- 数分待ってから再試行
+- IRSAのステータスを確認: https://irsa.ipac.caltech.edu/
+- テスト対象の星数を減らす（例: 10個→5個）
+
+**症状2**: "ORA-00942: table or view does not exist" (query_tap使用時)
+
+**原因**: IRSAのTAPサービスがテーブルへのアクセスを制限しているか、テーブル名が変更されました。
+
+**解決方法**:
+- **query_regionを使用**（推奨）: より安定しています
+- query_tapは実験的機能のため、本番環境ではquery_regionの使用を推奨
+
+**症状3**: Query timeout
+
+**原因**: クエリに時間がかかりすぎています。
+
+**解決方法**:
 ```python
-# app.py でタイムアウトを延長
+# app.py でタイムアウトを延長（既に120秒に設定済み）
 from astroquery.ipac.irsa import Irsa
-Irsa.TIMEOUT = 300  # 300秒
+Irsa.TIMEOUT = 300  # さらに延長する場合
 ```
 
-### AllWISE IDが見つからない
+#### 5. AllWISE IDが見つからない
 
 - カタログにAllWISE IDカラムが含まれているか確認
 - カラム名が `AllWISE_ID` または `allwise_id` であることを確認
