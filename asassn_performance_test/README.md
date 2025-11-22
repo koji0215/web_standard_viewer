@@ -80,6 +80,7 @@ venv\Scripts\activate  # Windows
 
 ```bash
 # ステップ1: コア依存関係をインストール（pyarrow 4.0.1を含む）
+# 特定のバージョンを使用してビルドエラーを回避
 pip install -r requirements-step1.txt
 
 # ステップ2: Webフレームワークをインストール
@@ -89,17 +90,42 @@ pip install -r requirements-step2.txt
 pip install --no-deps pyasassn
 ```
 
-**代替方法（手動インストール）**:
+**conda環境でのインストール（推奨）**:
+
+conda環境では、pipでのビルドエラーを回避するために、以下の手順を実行してください:
+
+```bash
+# conda環境を作成・アクティブ化
+conda create -n asassn_test python=3.11
+conda activate asassn_test
+
+# condaでnumpyとpandasをインストール（ビルド済みパッケージを使用）
+conda install numpy=1.24.3 pandas=2.1.0
+
+# pipでpyarrow 4.0.1をインストール（wheel が利用可能）
+pip install pyarrow==4.0.1
+
+# 残りの依存関係をインストール
+pip install 'setuptools<71' wheel 'astropy==6.0.0' 'astroquery==0.4.7'
+
+# Webフレームワークをインストール
+pip install -r requirements-step2.txt
+
+# pyasassnをインストール
+pip install --no-deps pyasassn
+```
+
+**代替方法（手動インストール・venv環境向け）**:
 
 ```bash
 # 1. setuptools と基本パッケージ
 pip install 'setuptools<71' wheel
 
-# 2. データ処理ライブラリ（pyarrow 4.0.1が重要）
-pip install numpy pandas pyarrow==4.0.1
+# 2. データ処理ライブラリ（特定バージョンを使用）
+pip install numpy==1.24.3 pandas==2.1.0 pyarrow==4.0.1
 
 # 3. 天文学ライブラリ
-pip install 'astropy>=6.0.0' 'astroquery>=0.4.7'
+pip install astropy==6.0.0 astroquery==0.4.7
 
 # 4. Webフレームワーク
 pip install fastapi 'uvicorn[standard]' pydantic
@@ -372,9 +398,20 @@ pyenv install 3.11.11
 pyenv local 3.11.11  # このディレクトリでPython 3.11を使用
 python3 --version    # 3.11.11 が表示されることを確認
 
-# 方法2: conda を使用
+# 方法2: conda を使用（推奨 - ビルド済みパッケージを活用）
 conda create -n asassn_test python=3.11
 conda activate asassn_test
+
+# condaでnumpyとpandasをインストール
+conda install numpy=1.24.3 pandas=2.1.0
+
+# pipでpyarrowをインストール
+pip install pyarrow==4.0.1
+
+# 残りの依存関係
+pip install 'setuptools<71' wheel astropy==6.0.0 astroquery==0.4.7
+pip install -r requirements-step2.txt
+pip install --no-deps pyasassn
 
 # 方法3: システムのpython3.11を使用
 python3.11 -m venv venv
