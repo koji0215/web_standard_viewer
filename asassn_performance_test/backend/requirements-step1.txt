@@ -3,6 +3,7 @@ setuptools<71
 wheel>=0.40.0
 numpy>=1.26.0
 pandas>=2.1.0
-pyarrow>=14.0.0
+# pyarrow 4.0.1 is required for pyasassn compatibility (has deserialize method)
+pyarrow==4.0.1
 astropy>=6.0.0
 astroquery>=0.4.7

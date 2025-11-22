@@ -40,19 +40,19 @@ venv\Scripts\activate  # Windows
 
 ### 依存パッケージのインストール
 
-**推奨方法（2ステップインストール）**:
+**重要**: pyasassnは内部でpyarrow 4.0.1の`deserialize()`メソッドを使用しています。
+新しいpyarrow (>=14.0.0)ではこのメソッドが削除されているため、pyarrow 4.0.1を使用する必要があります。
 
-pyasassnはpyarrow==4.0.1を要求しますが、Python 3.12+では問題があります。
-2ステップでインストールすることで互換性の問題を回避できます。
+**推奨方法（3ステップインストール）**:
 
 ```bash
-# ステップ1: コア依存関係をインストール
+# ステップ1: コア依存関係をインストール（pyarrow 4.0.1を含む）
 pip install -r requirements-step1.txt
 
 # ステップ2: Webフレームワークをインストール
 pip install -r requirements-step2.txt
 
-# ステップ3: pyasassnを依存関係チェック無しでインストール
+# ステップ3: pyasassnをインストール（依存関係は既に解決済み）
 pip install --no-deps pyasassn
 ```
 
@@ -62,8 +62,8 @@ pip install --no-deps pyasassn
 # 1. setuptools と基本パッケージ
 pip install 'setuptools<71' wheel
 
-# 2. データ処理ライブラリ
-pip install numpy pandas 'pyarrow>=14.0.0'
+# 2. データ処理ライブラリ（pyarrow 4.0.1が重要）
+pip install numpy pandas pyarrow==4.0.1
 
 # 3. 天文学ライブラリ
 pip install 'astropy>=6.0.0' 'astroquery>=0.4.7'
@@ -71,7 +71,7 @@ pip install 'astropy>=6.0.0' 'astroquery>=0.4.7'
 # 4. Webフレームワーク
 pip install fastapi 'uvicorn[standard]' pydantic
 
-# 5. pyasassn（依存関係の競合を無視）
+# 5. pyasassn（依存関係は既に解決済み）
 pip install --no-deps pyasassn
 ```
 
@@ -279,6 +279,42 @@ uvicorn app:app --port 8001
 - テスト対象の星数を減らす
 - Gaia IDを使用する（より高速）
 - ネットワーク接続を確認
+
+#### 6. "module 'pyarrow' has no attribute 'deserialize'" エラー
+
+**症状**: クエリ実行時に `Query failed: module 'pyarrow' has no attribute 'deserialize'` エラーが発生
+
+**原因**: pyasassnはpyarrow 4.0.1の`deserialize()`メソッドを使用していますが、
+新しいpyarrow (>=14.0.0)ではこのメソッドが削除されています。
+
+**解決方法**:
+```bash
+# 現在のpyarrowをアンインストール
+pip uninstall pyarrow -y
+
+# pyarrow 4.0.1をインストール
+pip install pyarrow==4.0.1
+
+# pyasassnを再インストール（依存関係チェックなし）
+pip install --no-deps pyasassn
+
+# または、仮想環境を作り直して推奨方法でインストール
+deactivate
+rm -rf venv
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-step1.txt
+pip install -r requirements-step2.txt
+pip install --no-deps pyasassn
+```
+
+**確認方法**:
+```python
+# Pythonで確認
+import pyarrow
+print(pyarrow.__version__)  # "4.0.1" が表示されるべき
+print(hasattr(pyarrow, 'deserialize'))  # True が表示されるべき
+```
 
 ## API仕様
 
