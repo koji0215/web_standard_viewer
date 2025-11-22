@@ -25,11 +25,44 @@ asassn_performance_test/
 
 ## セットアップ
 
+### 必須要件
+
+**Python バージョン**: **Python 3.9, 3.10, または 3.11 を推奨**
+
+⚠️ **重要**: Python 3.12+ では pyarrow 4.0.1 がビルドできません。pyasassnがpyarrow 4.0.1の`deserialize()`メソッドに依存しているため、このツールは**Python 3.9-3.11**でのみ動作します。
+
+Python 3.13をお使いの場合は、以下のいずれかの方法で対応してください:
+
+1. **pyenv を使用してPython 3.11をインストール** (推奨):
+   ```bash
+   # pyenv がインストールされていない場合
+   # Mac: brew install pyenv
+   # Linux: curl https://pyenv.run | bash
+   
+   # Python 3.11をインストール
+   pyenv install 3.11.11
+   
+   # このプロジェクト用にPython 3.11を使用
+   cd asassn_performance_test/backend
+   pyenv local 3.11.11
+   ```
+
+2. **conda を使用してPython 3.11環境を作成**:
+   ```bash
+   conda create -n asassn_test python=3.11
+   conda activate asassn_test
+   ```
+
+3. **システムに複数のPythonバージョンをインストール**し、`python3.11`コマンドを使用
+
 ### 1. Python環境の準備
 
 ```bash
 # このディレクトリに移動
 cd asassn_performance_test/backend
+
+# Pythonバージョンを確認（3.9-3.11である必要があります）
+python3 --version
 
 # 仮想環境を作成（推奨）
 python3 -m venv venv
@@ -38,7 +71,7 @@ source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate  # Windows
 ```
 
-### 依存パッケージのインストール
+### 2. 依存パッケージのインストール
 
 **重要**: pyasassnは内部でpyarrow 4.0.1の`deserialize()`メソッドを使用しています。
 新しいpyarrow (>=14.0.0)ではこのメソッドが削除されているため、pyarrow 4.0.1を使用する必要があります。
@@ -84,7 +117,7 @@ pip install -r requirements.txt
 注: 一部の環境では依存関係の競合が発生する場合があります。
 エラーが出た場合は上記の推奨方法または代替方法をお試しください。
 
-### 2. バックエンドサーバーの起動
+### 3. バックエンドサーバーの起動
 
 ```bash
 # backend/ ディレクトリで実行
@@ -98,7 +131,7 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8000
 - API: http://localhost:8000
 - API ドキュメント: http://localhost:8000/docs
 
-### 3. フロントエンドの起動
+### 4. フロントエンドの起動
 
 別のターミナルで、プロジェクトのルートディレクトリに戻ります:
 
@@ -315,6 +348,48 @@ import pyarrow
 print(pyarrow.__version__)  # "4.0.1" が表示されるべき
 print(hasattr(pyarrow, 'deserialize'))  # True が表示されるべき
 ```
+
+#### 7. pyarrow==4.0.1 のインストールエラー（Python 3.12+）
+
+**症状**: `pip install pyarrow==4.0.1` 実行時に以下のようなエラーが発生:
+```
+ERROR: Could not build wheels for pyarrow which use PEP 517 and cannot be installed directly
+```
+または
+```
+ERROR: Failed building wheel for numpy
+ModuleNotFoundError: No module named 'distutils'
+```
+
+**原因**: pyarrow 4.0.1はPython 3.12+をサポートしていません。ビルド依存関係（numpy 1.19.4）が
+Python 3.13から削除された`distutils`モジュールを必要とするため、ソースからのビルドに失敗します。
+
+**解決方法**: **Python 3.9-3.11を使用してください**
+
+```bash
+# 方法1: pyenv を使用（推奨）
+pyenv install 3.11.11
+pyenv local 3.11.11  # このディレクトリでPython 3.11を使用
+python3 --version    # 3.11.11 が表示されることを確認
+
+# 方法2: conda を使用
+conda create -n asassn_test python=3.11
+conda activate asassn_test
+
+# 方法3: システムのpython3.11を使用
+python3.11 -m venv venv
+source venv/bin/activate
+
+# その後、通常の手順でインストール
+pip install -r requirements-step1.txt
+pip install -r requirements-step2.txt
+pip install --no-deps pyasassn
+```
+
+**なぜPython 3.9-3.11が必要なのか**:
+- pyarrow 4.0.1はPython 3.9-3.11用のプリビルドホイール（.whl）を提供
+- Python 3.12+では`distutils`が削除され、古いパッケージのビルドが困難
+- pyasassnの更新版がリリースされるまで、Python 3.9-3.11の使用が必須
 
 ## API仕様
 
