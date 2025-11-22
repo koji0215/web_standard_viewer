@@ -1,0 +1,8 @@
+# Step 1: Install core dependencies first
+setuptools<71
+wheel>=0.40.0
+numpy>=1.26.0
+pandas>=2.1.0
+pyarrow>=14.0.0
+astropy>=6.0.0
+astroquery>=0.4.7

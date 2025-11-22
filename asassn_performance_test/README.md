@@ -36,10 +36,53 @@ python3 -m venv venv
 source venv/bin/activate  # Linux/Mac
 # または
 venv\Scripts\activate  # Windows
+```
 
-# 依存パッケージをインストール
+### 依存パッケージのインストール
+
+**推奨方法（2ステップインストール）**:
+
+pyasassnはpyarrow==4.0.1を要求しますが、Python 3.12+では問題があります。
+2ステップでインストールすることで互換性の問題を回避できます。
+
+```bash
+# ステップ1: コア依存関係をインストール
+pip install -r requirements-step1.txt
+
+# ステップ2: Webフレームワークをインストール
+pip install -r requirements-step2.txt
+
+# ステップ3: pyasassnを依存関係チェック無しでインストール
+pip install --no-deps pyasassn
+```
+
+**代替方法（手動インストール）**:
+
+```bash
+# 1. setuptools と基本パッケージ
+pip install 'setuptools<71' wheel
+
+# 2. データ処理ライブラリ
+pip install numpy pandas 'pyarrow>=14.0.0'
+
+# 3. 天文学ライブラリ
+pip install 'astropy>=6.0.0' 'astroquery>=0.4.7'
+
+# 4. Webフレームワーク
+pip install fastapi 'uvicorn[standard]' pydantic
+
+# 5. pyasassn（依存関係の競合を無視）
+pip install --no-deps pyasassn
+```
+
+**簡単な方法（競合の可能性あり）**:
+
+```bash
 pip install -r requirements.txt
 ```
+
+注: 一部の環境では依存関係の競合が発生する場合があります。
+エラーが出た場合は上記の推奨方法または代替方法をお試しください。
 
 ### 2. バックエンドサーバーの起動
 
@@ -161,15 +204,40 @@ lcs = client.cone_search(
 
 ### よくある問題と解決方法
 
-#### 1. pip install でエラーが発生する
+#### 1. pip install でエラーが発生する（Python 3.12+）
+
+**症状**: `ModuleNotFoundError: No module named 'distutils'` または pyarrow関連のエラー
+
+**原因**: pyasassnが古いpyarrow==4.0.1を要求するが、Python 3.12+では正しくビルドされない
 
 **解決方法**:
 ```bash
-pip install --upgrade pip setuptools wheel
+# setuptools と wheel を先にインストール
+pip install 'setuptools<71' wheel
+
+# requirements.txt を使用（pyarrowの新しいバージョンが先にインストールされる）
 pip install -r requirements.txt
 ```
 
-#### 2. pyasassnのインストールエラー
+または手動でインストール:
+```bash
+# 1. 基本パッケージ
+pip install 'setuptools<71' wheel numpy pandas
+
+# 2. 新しいpyarrowをインストール
+pip install 'pyarrow>=14.0.0'
+
+# 3. pyasassnの依存関係
+pip install 'astropy>=6.0.0' 'astroquery>=0.4.7' requests beautifulsoup4 html5lib keyring
+
+# 4. pyasassnをインストール（依存関係チェックを緩和）
+pip install pyasassn
+
+# 5. Webフレームワーク
+pip install fastapi 'uvicorn[standard]' pydantic
+```
+
+#### 2. pyasassnのインストールエラー（その他）
 
 **解決方法**:
 ```bash
