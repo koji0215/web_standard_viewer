@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ライトカーブビューワー プロトタイプ</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #4CAF50;
+        }
+
+        .controls {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-row label {
+            min-width: 100px;
+            font-weight: bold;
+        }
+
+        .control-row input,
+        .control-row select {
+            flex: 1;
+            min-width: 200px;
+            padding: 8px 12px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #333;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .chart-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .chart-panel h2 {
+            margin-bottom: 15px;
+            color: #4CAF50;
+            font-size: 20px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+        }
+
+        .info-panel {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .info-panel h2 {
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .info-item {
+            padding: 10px;
+            background-color: #1a1a1a;
+            border-radius: 4px;
+        }
+
+        .info-item strong {
+            color: #888;
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #888;
+        }
+
+        .error {
+            background-color: #7a1a1a;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .sample-list {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .sample-list h2 {
+            margin-bottom: 15px;
+            color: #4CAF50;
+        }
+
+        .sample-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .sample-btn {
+            padding: 8px 15px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .sample-btn:hover {
+            background-color: #0052a3;
+        }
+
+        @media (max-width: 1024px) {
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌟 ライトカーブビューワー プロトタイプ</h1>
+
+        <div class="controls">
+            <div class="control-row">
+                <label for="sourceId">SOURCE ID:</label>
+                <input type="text" id="sourceId" placeholder="例: 4515624509348164608">
+                <button onclick="loadLightcurves()">ライトカーブを表示</button>
+            </div>
+            <div class="control-row">
+                <label>または座標で検索:</label>
+                <input type="number" id="ra" placeholder="RA (度)" step="0.000001">
+                <input type="number" id="dec" placeholder="Dec (度)" step="0.000001">
+                <button onclick="loadLightcurvesByCoord()">座標から表示</button>
+            </div>
+        </div>
+
+        <div id="errorMessage" class="error" style="display: none;"></div>
+
+        <div id="loadingMessage" class="loading" style="display: none;">
+            データを読み込んでいます...
+        </div>
+
+        <div id="infoPanel" class="info-panel" style="display: none;">
+            <h2>天体情報</h2>
+            <div class="info-grid">
+                <div class="info-item">
+                    <strong>SOURCE ID</strong>
+                    <span id="infoSourceId">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>AllWISE ID</strong>
+                    <span id="infoAllwiseId">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>RA (度)</strong>
+                    <span id="infoRa">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>Dec (度)</strong>
+                    <span id="infoDec">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>NEOWISE観測数</strong>
+                    <span id="infoNeowiseObs">-</span>
+                </div>
+                <div class="info-item">
+                    <strong>ASASSN観測数</strong>
+                    <span id="infoAsassnObs">-</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="chartsContainer" class="charts-container" style="display: none;">
+            <div class="chart-panel">
+                <h2>NEOWISE ライトカーブ</h2>
+                <div class="chart-container">
+                    <canvas id="neowiseChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-panel">
+                <h2>ASASSN ライトカーブ</h2>
+                <div class="chart-container">
+                    <canvas id="asassnChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="sample-list">
+            <h2>サンプルデータ（クリックして表示）</h2>
+            <div class="sample-buttons" id="sampleButtons">
+                <div class="loading">サンプルを読み込んでいます...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        let neowiseChart = null;
+        let asassnChart = null;
+
+        // ページ読み込み時にサンプルリストを取得
+        window.addEventListener('DOMContentLoaded', loadSampleList);
+
+        async function loadSampleList() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/list`);
+                const data = await response.json();
+                
+                const container = document.getElementById('sampleButtons');
+                container.innerHTML = '';
+                
+                // 最初の10個のみ表示
+                data.neowise_sources.slice(0, 10).forEach(sourceId => {
+                    const btn = document.createElement('button');
+                    btn.className = 'sample-btn';
+                    btn.textContent = sourceId.substring(0, 10) + '...';
+                    btn.title = sourceId;
+                    btn.onclick = () => {
+                        document.getElementById('sourceId').value = sourceId;
+                        loadLightcurves();
+                    };
+                    container.appendChild(btn);
+                });
+            } catch (error) {
+                console.error('サンプルリストの読み込みに失敗:', error);
+            }
+        }
+
+        async function loadLightcurves() {
+            const sourceId = document.getElementById('sourceId').value.trim();
+            
+            if (!sourceId) {
+                showError('SOURCE IDを入力してください');
+                return;
+            }
+
+            showLoading();
+            hideError();
+
+            try {
+                // NEOWISEとASASSNのデータを並行取得
+                const [neowiseData, asassnData] = await Promise.all([
+                    fetchLightcurve('neowise', sourceId),
+                    fetchLightcurve('asassn', sourceId)
+                ]);
+
+                displayLightcurves(neowiseData, asassnData);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function loadLightcurvesByCoord() {
+            const ra = parseFloat(document.getElementById('ra').value);
+            const dec = parseFloat(document.getElementById('dec').value);
+
+            if (isNaN(ra) || isNaN(dec)) {
+                showError('有効なRAとDecを入力してください');
+                return;
+            }
+
+            showLoading();
+            hideError();
+
+            try {
+                const [neowiseData, asassnData] = await Promise.all([
+                    fetchLightcurveByCoord('neowise', ra, dec),
+                    fetchLightcurveByCoord('asassn', ra, dec)
+                ]);
+
+                displayLightcurves(neowiseData, asassnData);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function fetchLightcurve(survey, sourceId) {
+            const response = await fetch(
+                `${API_BASE_URL}/api/lightcurve/${survey}?source_id=${encodeURIComponent(sourceId)}`
+            );
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(`${survey}: ${error.detail || 'データの取得に失敗しました'}`);
+            }
+
+            return await response.json();
+        }
+
+        async function fetchLightcurveByCoord(survey, ra, dec) {
+            const response = await fetch(
+                `${API_BASE_URL}/api/lightcurve/${survey}?ra=${ra}&dec=${dec}`
+            );
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(`${survey}: ${error.detail || 'データの取得に失敗しました'}`);
+            }
+
+            return await response.json();
+        }
+
+        function displayLightcurves(neowiseData, asassnData) {
+            // 情報パネルを更新
+            document.getElementById('infoSourceId').textContent = neowiseData.source_id;
+            document.getElementById('infoAllwiseId').textContent = neowiseData.allwise_id || '-';
+            document.getElementById('infoRa').textContent = neowiseData.ra.toFixed(6);
+            document.getElementById('infoDec').textContent = neowiseData.dec.toFixed(6);
+            document.getElementById('infoNeowiseObs').textContent = neowiseData.num_observations;
+            document.getElementById('infoAsassnObs').textContent = asassnData.num_observations;
+
+            document.getElementById('infoPanel').style.display = 'block';
+            document.getElementById('chartsContainer').style.display = 'grid';
+
+            // NEOWISEチャートを描画
+            plotNEOWISE(neowiseData);
+
+            // ASASSNチャートを描画
+            plotASASSN(asassnData);
+        }
+
+        function plotNEOWISE(data) {
+            const ctx = document.getElementById('neowiseChart').getContext('2d');
+
+            if (neowiseChart) {
+                neowiseChart.destroy();
+            }
+
+            // W1とW2のデータを準備
+            const w1Data = data.observations.map(obs => ({
+                x: obs.mjd,
+                y: obs.w1_mag
+            }));
+
+            const w2Data = data.observations.map(obs => ({
+                x: obs.mjd,
+                y: obs.w2_mag
+            }));
+
+            neowiseChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'W1 (3.4μm)',
+                            data: w1Data,
+                            backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            pointRadius: 3
+                        },
+                        {
+                            label: 'W2 (4.6μm)',
+                            data: w2Data,
+                            backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            pointRadius: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'MJD',
+                                color: '#ccc'
+                            },
+                            ticks: { color: '#ccc' },
+                            grid: { color: '#444' }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Magnitude',
+                                color: '#ccc'
+                            },
+                            reverse: true,
+                            ticks: { color: '#ccc' },
+                            grid: { color: '#444' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ccc' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} mag`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function plotASASSN(data) {
+            const ctx = document.getElementById('asassnChart').getContext('2d');
+
+            if (asassnChart) {
+                asassnChart.destroy();
+            }
+
+            // バンドごとにデータを分類
+            const bands = {};
+            data.observations.forEach(obs => {
+                if (!bands[obs.band]) {
+                    bands[obs.band] = [];
+                }
+                bands[obs.band].push({
+                    x: obs.mjd,
+                    y: obs.mag
+                });
+            });
+
+            // 各バンドのデータセットを作成
+            const datasets = [];
+            const colors = {
+                'V': { bg: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)' },
+                'g': { bg: 'rgba(153, 102, 255, 0.6)', border: 'rgba(153, 102, 255, 1)' },
+                'B': { bg: 'rgba(255, 206, 86, 0.6)', border: 'rgba(255, 206, 86, 1)' }
+            };
+
+            for (const [band, points] of Object.entries(bands)) {
+                const color = colors[band] || { bg: 'rgba(200, 200, 200, 0.6)', border: 'rgba(200, 200, 200, 1)' };
+                datasets.push({
+                    label: `${band} band`,
+                    data: points,
+                    backgroundColor: color.bg,
+                    borderColor: color.border,
+                    pointRadius: 3
+                });
+            }
+
+            asassnChart = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'MJD',
+                                color: '#ccc'
+                            },
+                            ticks: { color: '#ccc' },
+                            grid: { color: '#444' }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Magnitude',
+                                color: '#ccc'
+                            },
+                            reverse: true,
+                            ticks: { color: '#ccc' },
+                            grid: { color: '#444' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#ccc' }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} mag`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function showLoading() {
+            document.getElementById('loadingMessage').style.display = 'block';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingMessage').style.display = 'none';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
