@@ -1,0 +1,26 @@
+# ASASSN Performance Test Requirements
+# 
+# IMPORTANT: Due to pyasassn's strict dependency on pyarrow==4.0.1 (which has issues with Python 3.12+),
+# install in two steps for best compatibility:
+#
+# Step 1: pip install -r requirements-step1.txt
+# Step 2: pip install -r requirements-step2.txt
+#
+# Or use the manual installation method in README.md
+
+# If you want to try one-step installation (may have conflicts):
+setuptools<71
+wheel>=0.40.0
+
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+numpy>=1.26.0
+pandas>=2.1.0
+pyarrow>=14.0.0
+
+astropy>=6.0.0
+astroquery>=0.4.7
+
+pyasassn>=0.6.0

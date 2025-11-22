@@ -1,0 +1,10 @@
+# Step 1: Install core dependencies first
+# Use specific compatible versions that have pre-built wheels for Python 3.11
+setuptools<71
+wheel>=0.40.0
+numpy==1.24.3
+pandas==2.1.0
+# pyarrow 4.0.1 is required for pyasassn compatibility (has deserialize method)
+pyarrow==4.0.1
+astropy==6.0.0
+astroquery==0.4.7

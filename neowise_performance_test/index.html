@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEOWISE Performance Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+
+        .section {
+            background-color: #2a2a2a;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .section h2 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="file"],
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #1a1a1a;
+            color: #fff;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            min-height: 100px;
+            font-family: monospace;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        button.primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        button.primary:hover {
+            background-color: #45a049;
+        }
+
+        button.secondary {
+            background-color: #2196F3;
+            color: white;
+        }
+
+        button.secondary:hover {
+            background-color: #0b7dda;
+        }
+
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .status.info {
+            background-color: #2196F3;
+        }
+
+        .status.success {
+            background-color: #4CAF50;
+        }
+
+        .status.error {
+            background-color: #f44336;
+        }
+
+        .status.warning {
+            background-color: #ff9800;
+        }
+
+        .results {
+            margin-top: 20px;
+        }
+
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+
+        .comparison-table th {
+            background-color: #1a1a1a;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .comparison-table tr:hover {
+            background-color: #333;
+        }
+
+        .highlight {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 12px;
+        }
+
+        .details-table th,
+        .details-table td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #444;
+        }
+
+        .details-table th {
+            background-color: #1a1a1a;
+            color: #4CAF50;
+        }
+
+        .details-table .success {
+            color: #4CAF50;
+        }
+
+        .details-table .error {
+            color: #f44336;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .info-box {
+            background-color: #1a4d7a;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+
+        .info-box h3 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+
+        .info-box ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .info-box code {
+            background-color: #2a2a2a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NEOWISE パフォーマンステスト</h1>
+
+        <div class="info-box">
+            <h3>🎯 テストの目的</h3>
+            <p>NEOWISE時系列データの取得方法を比較し、最適なアプローチを決定します：</p>
+            <ul>
+                <li><strong>query_region</strong>: 座標ベースの検索（従来の方法、推奨）</li>
+                <li><strong>query_tap</strong>: TAP（Table Access Protocol）を使用した検索（実験的、不安定な場合あり）</li>
+            </ul>
+            <p><strong>API Endpoint:</strong> <code>http://localhost:8000</code></p>
+        </div>
+
+        <div class="info-box" style="background-color: #7a4d1a;">
+            <h3>⚠️ 重要な注意事項</h3>
+            <p><strong>IRSAサーバーの状態について:</strong></p>
+            <ul>
+                <li>IRSAサーバーは一時的にダウンまたは過負荷になることがあります（502エラー）</li>
+                <li>query_tapは不安定で、テーブルアクセスエラー（ORA-00942）が発生する可能性があります</li>
+                <li><strong>推奨</strong>: まず<strong>query_region</strong>のみをテストしてください</li>
+                <li>エラーが頻発する場合は、時間を置いてから再試行してください</li>
+                <li>テスト対象の星数を少なく（3-5個）から始めることを推奨します</li>
+            </ul>
+        </div>
+
+        <!-- カタログ読み込み -->
+        <div class="section">
+            <h2>📁 1. カタログの準備</h2>
+            
+            <div class="input-group">
+                <label for="catalog-file">カタログファイル（CSV）</label>
+                <input type="file" id="catalog-file" accept=".csv">
+                <small style="color: #aaa;">※ BrightKg_WISE_unique.csv または同形式のCSVファイル</small>
+            </div>
+
+            <div class="input-group">
+                <label for="num-stars">テスト対象の星数</label>
+                <input type="number" id="num-stars" value="10" min="1" max="100">
+                <small style="color: #aaa;">※ 多すぎると時間がかかります（推奨: 5-20個）</small>
+            </div>
+
+            <div class="button-group">
+                <button class="primary" onclick="loadCatalog()">カタログを読み込む</button>
+            </div>
+
+            <div id="catalog-status"></div>
+            
+            <!-- カラムマッピング -->
+            <div id="column-mapping-section" style="display: none; margin-top: 20px; padding: 15px; background-color: #1a1a1a; border-radius: 4px;">
+                <h3 style="margin-top: 0; color: #4CAF50;">カラムマッピング</h3>
+                <p style="color: #aaa;">カタログファイルのカラムを以下の項目にマッピングしてください：</p>
+                
+                <div class="input-group">
+                    <label for="ra-column">RA（赤経）のカラム名</label>
+                    <select id="ra-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- 選択してください --</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="dec-column">DEC（赤緯）のカラム名</label>
+                    <select id="dec-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- 選択してください --</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="allwise-column">AllWISE IDのカラム名（オプション）</label>
+                    <select id="allwise-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- なし（座標のみで検索） --</option>
+                    </select>
+                </div>
+                
+                <div class="input-group">
+                    <label for="source-column">Source ID のカラム名（オプション）</label>
+                    <select id="source-column" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background-color: #2a2a2a; color: #fff;">
+                        <option value="">-- 自動生成 --</option>
+                    </select>
+                </div>
+                
+                <div class="button-group">
+                    <button class="primary" onclick="applyColumnMapping()">カラムマッピングを適用</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- テスト実行 -->
+        <div class="section">
+            <h2>🚀 2. パフォーマンステストの実行</h2>
+            
+            <p style="color: #aaa;">読み込んだカタログから各方法でデータを取得し、所要時間を比較します。</p>
+
+            <div class="button-group">
+                <button class="primary" id="test-region-btn" onclick="runTest('query_region')" disabled>
+                    query_region でテスト
+                </button>
+                <button class="secondary" id="test-tap-btn" onclick="runTest('query_tap')" disabled>
+                    query_tap でテスト
+                </button>
+                <button class="secondary" id="test-both-btn" onclick="runBothTests()" disabled>
+                    両方を比較テスト
+                </button>
+            </div>
+
+            <div id="test-status"></div>
+            
+            <!-- 進捗表示 -->
+            <div id="progress-section" style="display: none; margin-top: 15px; padding: 15px; background-color: #1a1a1a; border-radius: 4px;">
+                <h3 style="margin-top: 0; color: #4CAF50;">テスト進行状況</h3>
+                <div style="margin-bottom: 10px;">
+                    <div style="background-color: #333; height: 30px; border-radius: 4px; overflow: hidden; position: relative;">
+                        <div id="progress-bar" style="background-color: #4CAF50; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                        <div id="progress-text" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; color: #fff;"></div>
+                    </div>
+                </div>
+                <div id="progress-details" style="color: #aaa; font-size: 14px;"></div>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>テスト実行中...</p>
+            </div>
+        </div>
+
+        <!-- 結果表示 -->
+        <div class="section results" id="results-section" style="display: none;">
+            <h2>📊 3. テスト結果</h2>
+
+            <!-- 比較サマリー -->
+            <div id="comparison-summary"></div>
+
+            <!-- 詳細結果 -->
+            <div id="detailed-results"></div>
+
+            <!-- グラフ -->
+            <div class="chart-container">
+                <canvas id="performance-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script>
+        let catalogData = [];
+        let rawCatalogData = [];
+        let columnMapping = {
+            ra: null,
+            dec: null,
+            allwise_id: null,
+            source_id: null
+        };
+        let testResults = {
+            query_region: null,
+            query_tap: null
+        };
+
+        const API_URL = 'http://localhost:8000';
+
+        function showStatus(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function loadCatalog() {
+            const fileInput = document.getElementById('catalog-file');
+
+            if (!fileInput.files || !fileInput.files[0]) {
+                showStatus('catalog-status', 'カタログファイルを選択してください', 'error');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            showStatus('catalog-status', `ファイルを読み込み中: ${file.name}...`, 'info');
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                complete: function(results) {
+                    if (results.data.length === 0) {
+                        showStatus('catalog-status', 'カタログが空です', 'error');
+                        return;
+                    }
+
+                    rawCatalogData = results.data.filter(row => 
+                        row && Object.keys(row).length > 0
+                    );
+
+                    if (rawCatalogData.length === 0) {
+                        showStatus('catalog-status', '有効なデータが見つかりません', 'error');
+                        return;
+                    }
+
+                    // カラム名を抽出
+                    const columns = Object.keys(rawCatalogData[0]);
+                    
+                    // カラムマッピングUIを表示
+                    setupColumnMapping(columns);
+                    
+                    showStatus('catalog-status', 
+                        `✓ ${rawCatalogData.length}行のデータを読み込みました。カラムマッピングを設定してください。`, 
+                        'success'
+                    );
+                },
+                error: function(error) {
+                    showStatus('catalog-status', `エラー: ${error.message}`, 'error');
+                }
+            });
+        }
+
+        function setupColumnMapping(columns) {
+            const raSelect = document.getElementById('ra-column');
+            const decSelect = document.getElementById('dec-column');
+            const allwiseSelect = document.getElementById('allwise-column');
+            const sourceSelect = document.getElementById('source-column');
+            
+            // セレクトボックスをクリア
+            [raSelect, decSelect, allwiseSelect, sourceSelect].forEach(select => {
+                const firstOption = select.options[0];
+                select.innerHTML = '';
+                select.appendChild(firstOption);
+            });
+            
+            // カラムを追加
+            columns.forEach(col => {
+                [raSelect, decSelect, allwiseSelect, sourceSelect].forEach(select => {
+                    const option = document.createElement('option');
+                    option.value = col;
+                    option.textContent = col;
+                    select.appendChild(option);
+                });
+            });
+            
+            // 自動推測
+            columns.forEach(col => {
+                const colLower = col.toLowerCase();
+                if (colLower === 'ra' || colLower === 'r.a.' || colLower === 'right_ascension') {
+                    raSelect.value = col;
+                }
+                if (colLower === 'dec' || colLower === 'decl' || colLower === 'declination') {
+                    decSelect.value = col;
+                }
+                if (colLower.includes('allwise') && colLower.includes('id')) {
+                    allwiseSelect.value = col;
+                }
+                if (colLower === 'source' || colLower === 'source_id' || colLower === 'name' || colLower === 'id') {
+                    sourceSelect.value = col;
+                }
+            });
+            
+            document.getElementById('column-mapping-section').style.display = 'block';
+        }
+
+        function applyColumnMapping() {
+            const raCol = document.getElementById('ra-column').value;
+            const decCol = document.getElementById('dec-column').value;
+            const allwiseCol = document.getElementById('allwise-column').value;
+            const sourceCol = document.getElementById('source-column').value;
+            
+            if (!raCol || !decCol) {
+                showStatus('catalog-status', 'RAとDECのカラムは必須です', 'error');
+                return;
+            }
+            
+            columnMapping = {
+                ra: raCol,
+                dec: decCol,
+                allwise_id: allwiseCol || null,
+                source_id: sourceCol || null
+            };
+            
+            const numStars = parseInt(document.getElementById('num-stars').value);
+            
+            // データを変換
+            const validData = rawCatalogData.filter(row => 
+                row[raCol] != null && row[decCol] != null && 
+                !isNaN(row[raCol]) && !isNaN(row[decCol])
+            );
+
+            if (validData.length === 0) {
+                showStatus('catalog-status', '有効なRA/DECデータが見つかりません', 'error');
+                return;
+            }
+
+            // ランダムにサンプリング
+            const shuffled = validData.sort(() => 0.5 - Math.random());
+            const sampled = shuffled.slice(0, Math.min(numStars, shuffled.length));
+
+            // カタログエントリーを準備
+            catalogData = sampled.map((row, index) => ({
+                source_id: sourceCol && row[sourceCol] ? String(row[sourceCol]) : `Star_${index + 1}`,
+                ra: parseFloat(row[raCol]),
+                dec: parseFloat(row[decCol]),
+                allwise_id: allwiseCol && row[allwiseCol] ? String(row[allwiseCol]) : null
+            }));
+
+            showStatus('catalog-status', 
+                `✓ ${catalogData.length}個の天体を準備しました（RA: ${raCol}, DEC: ${decCol}${allwiseCol ? ', AllWISE ID: ' + allwiseCol : ''}）`, 
+                'success'
+            );
+
+            // テストボタンを有効化
+            document.getElementById('test-region-btn').disabled = false;
+            document.getElementById('test-tap-btn').disabled = false;
+            document.getElementById('test-both-btn').disabled = false;
+        }
+
+        async function runTest(method) {
+            if (catalogData.length === 0) {
+                showStatus('test-status', 'まずカタログを読み込んでください', 'error');
+                return;
+            }
+
+            // UIを更新
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('progress-section').style.display = 'block';
+            showStatus('test-status', `${method} でテスト実行中...`, 'info');
+            
+            // ボタンを無効化
+            document.getElementById('test-region-btn').disabled = true;
+            document.getElementById('test-tap-btn').disabled = true;
+            document.getElementById('test-both-btn').disabled = true;
+
+            // 進捗をリセット
+            updateProgress(0, catalogData.length, '準備中...');
+
+            try {
+                // 1つずつ処理して進捗を表示
+                const results = [];
+                const totalEntries = catalogData.length;
+                const startTime = Date.now();
+                
+                for (let i = 0; i < totalEntries; i++) {
+                    const entry = catalogData[i];
+                    updateProgress(i, totalEntries, `${entry.source_id} を処理中...`);
+                    
+                    try {
+                        const response = await fetch(`${API_URL}/test-performance`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                catalog_entries: [entry],
+                                method: method
+                            })
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+
+                        const result = await response.json();
+                        if (result.results && result.results.length > 0) {
+                            results.push(result.results[0]);
+                        }
+                    } catch (error) {
+                        console.error(`Error processing ${entry.source_id}:`, error);
+                        results.push({
+                            source_id: entry.source_id,
+                            ra: entry.ra,
+                            dec: entry.dec,
+                            allwise_id: entry.allwise_id,
+                            query_time: 0,
+                            num_observations: 0,
+                            success: false,
+                            error_message: error.message
+                        });
+                    }
+                }
+                
+                updateProgress(totalEntries, totalEntries, '完了！');
+                
+                // 統計を計算
+                const totalTime = (Date.now() - startTime) / 1000;
+                const successfulResults = results.filter(r => r.success);
+                const queryTimes = successfulResults.map(r => r.query_time);
+                
+                const avgTime = queryTimes.length > 0 ? queryTimes.reduce((a, b) => a + b, 0) / queryTimes.length : 0;
+                const minTime = queryTimes.length > 0 ? Math.min(...queryTimes) : 0;
+                const maxTime = queryTimes.length > 0 ? Math.max(...queryTimes) : 0;
+                
+                testResults[method] = {
+                    method: method,
+                    total_time: totalTime,
+                    avg_time_per_star: avgTime,
+                    min_time: minTime,
+                    max_time: maxTime,
+                    successful_queries: successfulResults.length,
+                    failed_queries: results.length - successfulResults.length,
+                    results: results
+                };
+
+                showStatus('test-status', 
+                    `✓ ${method} のテストが完了しました（合計: ${totalTime.toFixed(2)}秒、成功: ${successfulResults.length}/${totalEntries}）`, 
+                    'success'
+                );
+
+                // 結果を表示
+                displayResults();
+
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('test-status', `エラー: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+                
+                // ボタンを再有効化
+                document.getElementById('test-region-btn').disabled = false;
+                document.getElementById('test-tap-btn').disabled = false;
+                document.getElementById('test-both-btn').disabled = false;
+            }
+        }
+
+        function updateProgress(current, total, message) {
+            const percentage = total > 0 ? (current / total) * 100 : 0;
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            const progressDetails = document.getElementById('progress-details');
+            
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = `${current} / ${total} (${percentage.toFixed(0)}%)`;
+            progressDetails.textContent = message;
+        }
+
+        async function runBothTests() {
+            await runTest('query_region');
+            await new Promise(resolve => setTimeout(resolve, 2000)); // 2秒待機
+            await runTest('query_tap');
+        }
+
+        function displayResults() {
+            const resultsSection = document.getElementById('results-section');
+            resultsSection.style.display = 'block';
+
+            // 比較サマリー
+            displayComparisonSummary();
+
+            // 詳細結果
+            displayDetailedResults();
+
+            // グラフ
+            displayChart();
+
+            // 結果セクションにスクロール
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayComparisonSummary() {
+            const summaryDiv = document.getElementById('comparison-summary');
+            
+            let html = '<h3>比較サマリー</h3>';
+            html += '<table class="comparison-table">';
+            html += '<thead><tr><th>指標</th><th>query_region</th><th>query_tap</th><th>差分</th></tr></thead>';
+            html += '<tbody>';
+
+            const metrics = [
+                { label: '合計時間', key: 'total_time', unit: '秒' },
+                { label: '平均時間/星', key: 'avg_time_per_star', unit: '秒' },
+                { label: '最小時間', key: 'min_time', unit: '秒' },
+                { label: '最大時間', key: 'max_time', unit: '秒' },
+                { label: '成功数', key: 'successful_queries', unit: '個' },
+                { label: '失敗数', key: 'failed_queries', unit: '個' }
+            ];
+
+            metrics.forEach(metric => {
+                const regionValue = testResults.query_region ? testResults.query_region[metric.key] : null;
+                const tapValue = testResults.query_tap ? testResults.query_tap[metric.key] : null;
+
+                let regionText = regionValue !== null ? `${regionValue.toFixed(3)} ${metric.unit}` : '-';
+                let tapText = tapValue !== null ? `${tapValue.toFixed(3)} ${metric.unit}` : '-';
+                let diffText = '-';
+
+                if (regionValue !== null && tapValue !== null && metric.key !== 'successful_queries' && metric.key !== 'failed_queries') {
+                    const diff = regionValue - tapValue;
+                    const percent = (diff / regionValue * 100).toFixed(1);
+                    const faster = diff > 0 ? 'query_tap' : 'query_region';
+                    diffText = `<span class="highlight">${Math.abs(diff).toFixed(3)}秒 (${Math.abs(percent)}%) ${faster}の方が速い</span>`;
+                }
+
+                html += `<tr><td>${metric.label}</td><td>${regionText}</td><td>${tapText}</td><td>${diffText}</td></tr>`;
+            });
+
+            html += '</tbody></table>';
+
+            // 推奨事項
+            if (testResults.query_region && testResults.query_tap) {
+                const regionAvg = testResults.query_region.avg_time_per_star;
+                const tapAvg = testResults.query_tap.avg_time_per_star;
+                
+                html += '<div style="margin-top: 20px; padding: 15px; background-color: #1a4d7a; border-radius: 4px;">';
+                html += '<h4>💡 推奨事項</h4>';
+                
+                if (tapAvg < regionAvg) {
+                    const improvement = ((regionAvg - tapAvg) / regionAvg * 100).toFixed(1);
+                    html += `<p><strong>query_tap</strong>の方が約<strong>${improvement}%</strong>高速です。`;
+                    if (improvement > 30) {
+                        html += ' <span class="highlight">大幅な改善が見込めるため、query_tapの採用を強く推奨します。</span>';
+                    } else if (improvement > 10) {
+                        html += ' 有意な改善が見られるため、query_tapの採用を推奨します。';
+                    } else {
+                        html += ' 若干の改善が見られますが、実装の複雑さも考慮して判断してください。';
+                    }
+                    html += '</p>';
+                } else {
+                    html += '<p>query_regionとquery_tapの性能差は小さいため、実装のシンプルさを優先してquery_regionを採用することを推奨します。</p>';
+                }
+                
+                html += '</div>';
+            }
+
+            summaryDiv.innerHTML = html;
+        }
+
+        function displayDetailedResults() {
+            const detailedDiv = document.getElementById('detailed-results');
+            
+            let html = '<h3>詳細結果</h3>';
+
+            ['query_region', 'query_tap'].forEach(method => {
+                if (!testResults[method]) return;
+
+                html += `<h4>${method}</h4>`;
+                html += '<table class="details-table">';
+                html += '<thead><tr><th>Source ID</th><th>RA</th><th>Dec</th><th>AllWISE ID</th><th>時間(秒)</th><th>観測数</th><th>状態</th></tr></thead>';
+                html += '<tbody>';
+
+                testResults[method].results.forEach(result => {
+                    const statusClass = result.success ? 'success' : 'error';
+                    const statusText = result.success ? '✓ 成功' : `✗ 失敗: ${result.error_message}`;
+                    
+                    html += `<tr>
+                        <td>${result.source_id}</td>
+                        <td>${result.ra.toFixed(5)}</td>
+                        <td>${result.dec.toFixed(5)}</td>
+                        <td>${result.allwise_id || '-'}</td>
+                        <td>${result.query_time.toFixed(3)}</td>
+                        <td>${result.num_observations}</td>
+                        <td class="${statusClass}">${statusText}</td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+            });
+
+            detailedDiv.innerHTML = html;
+        }
+
+        function displayChart() {
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+
+            // 既存のチャートを破棄
+            if (window.performanceChart) {
+                window.performanceChart.destroy();
+            }
+
+            const labels = catalogData.map(entry => entry.source_id);
+            const datasets = [];
+
+            if (testResults.query_region) {
+                datasets.push({
+                    label: 'query_region',
+                    data: testResults.query_region.results.map(r => r.query_time),
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                });
+            }
+
+            if (testResults.query_tap) {
+                datasets.push({
+                    label: 'query_tap',
+                    data: testResults.query_tap.results.map(r => r.query_time),
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                });
+            }
+
+            window.performanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '天体',
+                                color: '#ccc'
+                            },
+                            ticks: {
+                                color: '#ccc'
+                            },
+                            grid: {
+                                color: '#444'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '取得時間 (秒)',
+                                color: '#ccc'
+                            },
+                            ticks: {
+                                color: '#ccc'
+                            },
+                            grid: {
+                                color: '#444'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'クエリ性能比較（天体ごと）',
+                            color: '#fff',
+                            font: {
+                                size: 16
+                            }
+                        },
+                        legend: {
+                            labels: {
+                                color: '#ccc'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
