@@ -406,15 +406,21 @@
                 neowiseChart.destroy();
             }
 
-            // W1とW2のデータを準備
+            // W1とW2のデータを準備（エラーバー情報を含む）
             const w1Data = data.observations.map(obs => ({
                 x: obs.mjd,
-                y: obs.w1_mag
+                y: obs.w1_mag,
+                yMin: obs.w1_mag - obs.w1_err,
+                yMax: obs.w1_mag + obs.w1_err,
+                err: obs.w1_err
             }));
 
             const w2Data = data.observations.map(obs => ({
                 x: obs.mjd,
-                y: obs.w2_mag
+                y: obs.w2_mag,
+                yMin: obs.w2_mag - obs.w2_err,
+                yMax: obs.w2_mag + obs.w2_err,
+                err: obs.w2_err
             }));
 
             neowiseChart = new Chart(ctx, {
@@ -426,14 +432,18 @@
                             data: w1Data,
                             backgroundColor: 'rgba(255, 99, 132, 0.6)',
                             borderColor: 'rgba(255, 99, 132, 1)',
-                            pointRadius: 3
+                            pointRadius: 3,
+                            errorBarColor: 'rgba(255, 99, 132, 0.5)',
+                            errorBarLineWidth: 1
                         },
                         {
                             label: 'W2 (4.6μm)',
                             data: w2Data,
                             backgroundColor: 'rgba(54, 162, 235, 0.6)',
                             borderColor: 'rgba(54, 162, 235, 1)',
-                            pointRadius: 3
+                            pointRadius: 3,
+                            errorBarColor: 'rgba(54, 162, 235, 0.5)',
+                            errorBarLineWidth: 1
                         }
                     ]
                 },
@@ -468,12 +478,56 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} mag`;
+                                    const point = context.raw;
+                                    return `${context.dataset.label}: ${point.y.toFixed(3)} ± ${point.err.toFixed(3)} mag`;
                                 }
                             }
                         }
                     }
-                }
+                },
+                plugins: [{
+                    id: 'errorBars',
+                    afterDatasetsDraw: function(chart) {
+                        const ctx = chart.ctx;
+                        chart.data.datasets.forEach((dataset, datasetIndex) => {
+                            const meta = chart.getDatasetMeta(datasetIndex);
+                            if (!meta.hidden) {
+                                meta.data.forEach((element, index) => {
+                                    const dataPoint = dataset.data[index];
+                                    if (dataPoint.yMin !== undefined && dataPoint.yMax !== undefined) {
+                                        const x = element.x;
+                                        const yMin = chart.scales.y.getPixelForValue(dataPoint.yMin);
+                                        const yMax = chart.scales.y.getPixelForValue(dataPoint.yMax);
+                                        
+                                        ctx.save();
+                                        ctx.strokeStyle = dataset.errorBarColor || dataset.borderColor;
+                                        ctx.lineWidth = dataset.errorBarLineWidth || 1;
+                                        
+                                        // 縦線（エラーバー）
+                                        ctx.beginPath();
+                                        ctx.moveTo(x, yMin);
+                                        ctx.lineTo(x, yMax);
+                                        ctx.stroke();
+                                        
+                                        // 上端のキャップ
+                                        ctx.beginPath();
+                                        ctx.moveTo(x - 3, yMin);
+                                        ctx.lineTo(x + 3, yMin);
+                                        ctx.stroke();
+                                        
+                                        // 下端のキャップ
+                                        ctx.beginPath();
+                                        ctx.moveTo(x - 3, yMax);
+                                        ctx.lineTo(x + 3, yMax);
+                                        ctx.stroke();
+                                        
+                                        ctx.restore();
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }]
             });
         }
 
@@ -484,7 +538,7 @@
                 asassnChart.destroy();
             }
 
-            // バンドごとにデータを分類
+            // バンドごとにデータを分類（エラーバー情報を含む）
             const bands = {};
             data.observations.forEach(obs => {
                 if (!bands[obs.band]) {
@@ -492,26 +546,35 @@
                 }
                 bands[obs.band].push({
                     x: obs.mjd,
-                    y: obs.mag
+                    y: obs.mag,
+                    yMin: obs.mag - obs.mag_err,
+                    yMax: obs.mag + obs.mag_err,
+                    err: obs.mag_err
                 });
             });
 
             // 各バンドのデータセットを作成
             const datasets = [];
             const colors = {
-                'V': { bg: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)' },
-                'g': { bg: 'rgba(153, 102, 255, 0.6)', border: 'rgba(153, 102, 255, 1)' },
-                'B': { bg: 'rgba(255, 206, 86, 0.6)', border: 'rgba(255, 206, 86, 1)' }
+                'V': { bg: 'rgba(75, 192, 192, 0.6)', border: 'rgba(75, 192, 192, 1)', error: 'rgba(75, 192, 192, 0.5)' },
+                'g': { bg: 'rgba(153, 102, 255, 0.6)', border: 'rgba(153, 102, 255, 1)', error: 'rgba(153, 102, 255, 0.5)' },
+                'B': { bg: 'rgba(255, 206, 86, 0.6)', border: 'rgba(255, 206, 86, 1)', error: 'rgba(255, 206, 86, 0.5)' }
             };
 
             for (const [band, points] of Object.entries(bands)) {
-                const color = colors[band] || { bg: 'rgba(200, 200, 200, 0.6)', border: 'rgba(200, 200, 200, 1)' };
+                const color = colors[band] || { 
+                    bg: 'rgba(200, 200, 200, 0.6)', 
+                    border: 'rgba(200, 200, 200, 1)',
+                    error: 'rgba(200, 200, 200, 0.5)'
+                };
                 datasets.push({
                     label: `${band} band`,
                     data: points,
                     backgroundColor: color.bg,
                     borderColor: color.border,
-                    pointRadius: 3
+                    pointRadius: 3,
+                    errorBarColor: color.error,
+                    errorBarLineWidth: 1
                 });
             }
 
@@ -549,12 +612,56 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} mag`;
+                                    const point = context.raw;
+                                    return `${context.dataset.label}: ${point.y.toFixed(3)} ± ${point.err.toFixed(3)} mag`;
                                 }
                             }
                         }
                     }
-                }
+                },
+                plugins: [{
+                    id: 'errorBars',
+                    afterDatasetsDraw: function(chart) {
+                        const ctx = chart.ctx;
+                        chart.data.datasets.forEach((dataset, datasetIndex) => {
+                            const meta = chart.getDatasetMeta(datasetIndex);
+                            if (!meta.hidden) {
+                                meta.data.forEach((element, index) => {
+                                    const dataPoint = dataset.data[index];
+                                    if (dataPoint.yMin !== undefined && dataPoint.yMax !== undefined) {
+                                        const x = element.x;
+                                        const yMin = chart.scales.y.getPixelForValue(dataPoint.yMin);
+                                        const yMax = chart.scales.y.getPixelForValue(dataPoint.yMax);
+                                        
+                                        ctx.save();
+                                        ctx.strokeStyle = dataset.errorBarColor || dataset.borderColor;
+                                        ctx.lineWidth = dataset.errorBarLineWidth || 1;
+                                        
+                                        // 縦線（エラーバー）
+                                        ctx.beginPath();
+                                        ctx.moveTo(x, yMin);
+                                        ctx.lineTo(x, yMax);
+                                        ctx.stroke();
+                                        
+                                        // 上端のキャップ
+                                        ctx.beginPath();
+                                        ctx.moveTo(x - 3, yMin);
+                                        ctx.lineTo(x + 3, yMin);
+                                        ctx.stroke();
+                                        
+                                        // 下端のキャップ
+                                        ctx.beginPath();
+                                        ctx.moveTo(x - 3, yMax);
+                                        ctx.lineTo(x + 3, yMax);
+                                        ctx.stroke();
+                                        
+                                        ctx.restore();
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }]
             });
         }
 
