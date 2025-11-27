@@ -14,6 +14,9 @@ NEOWISE 生データ取得・SQLite出力スクリプト
     
     # 並列処理（高速）
     python neowise_to_sqlite.py --sources sources.csv --output neowise_lightcurves.db --parallel --workers 4
+    
+    # データベースをクリア（再実行前に）
+    python neowise_to_sqlite.py --clear --output neowise_lightcurves.db
 
 sources.csvの形式:
     source_id,ra,dec,AllWISE_ID
@@ -25,11 +28,19 @@ import pandas as pd
 import numpy as np
 import sqlite3
 import argparse
+import logging
 from pathlib import Path
 from typing import Optional, Tuple, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import time
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# ログ設定
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
 # astroqueryは実行環境で利用可能な場合のみインポート
 try:
@@ -39,7 +50,7 @@ try:
     ASTROQUERY_AVAILABLE = True
 except ImportError:
     ASTROQUERY_AVAILABLE = False
-    print("Warning: astroquery not available. Using mock data for testing.")
+    logging.warning("astroquery not available. Using mock data for testing.")
 
 try:
     from tqdm import tqdm
@@ -49,6 +60,45 @@ except ImportError:
 
 # スレッドセーフなデータベース書き込み用ロック
 db_lock = threading.Lock()
+
+# セマフォで「同時に発行する IRSA クエリ数」を制限（executor の workers とは別）
+MAX_CONCURRENT_QUERIES = 4
+query_semaphore = threading.BoundedSemaphore(MAX_CONCURRENT_QUERIES)
+
+
+def prepare_irsa_session(pool_maxsize=50, max_retries=3, backoff_factor=1.0):
+    """
+    requests セッションを作って Irsa に流用（コネクションプールと retry 設定）
+    
+    Parameters:
+    -----------
+    pool_maxsize : int
+        コネクションプールの最大サイズ
+    max_retries : int
+        最大リトライ回数
+    backoff_factor : float
+        リトライ間隔の係数
+    
+    Returns:
+    --------
+    requests.Session
+        設定済みのセッション
+    """
+    session = requests.Session()
+    retries = Retry(
+        total=max_retries,
+        backoff_factor=backoff_factor,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=frozenset(['GET', 'POST'])
+    )
+    adapter = HTTPAdapter(pool_connections=pool_maxsize, pool_maxsize=pool_maxsize, max_retries=retries)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    # astroquery uses Irsa._session internally; set it so all queries reuse this session
+    if ASTROQUERY_AVAILABLE:
+        Irsa._session = session
+    logging.info("Prepared Irsa._session with pool_maxsize=%s", pool_maxsize)
+    return session
 
 
 def create_neowise_database(db_path: str) -> sqlite3.Connection:
@@ -145,6 +195,70 @@ def create_neowise_database(db_path: str) -> sqlite3.Connection:
     
     conn.commit()
     return conn
+
+
+def clear_database(db_path: str) -> bool:
+    """
+    SQLiteデータベースの全データをクリア（テーブル構造は維持）
+    
+    Parameters:
+    -----------
+    db_path : str
+        データベースファイルのパス
+    
+    Returns:
+    --------
+    bool
+        成功した場合True
+    """
+    if not Path(db_path).exists():
+        logging.warning(f"Database file not found: {db_path}")
+        return False
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 各テーブルのデータを削除
+        tables = ['neowise_epoch_summary', 'neowise_raw_observations', 'sources']
+        for table in tables:
+            cursor.execute(f'DELETE FROM {table}')
+            logging.info(f"Cleared table: {table}")
+        
+        # VACUUM で空き容量を回収
+        conn.execute('VACUUM')
+        conn.commit()
+        conn.close()
+        
+        logging.info(f"Database cleared successfully: {db_path}")
+        return True
+    except Exception as e:
+        logging.error(f"Error clearing database: {e}")
+        return False
+
+
+def drop_database(db_path: str) -> bool:
+    """
+    SQLiteデータベースファイルを削除
+    
+    Parameters:
+    -----------
+    db_path : str
+        データベースファイルのパス
+    
+    Returns:
+    --------
+    bool
+        成功した場合True
+    """
+    import os
+    if Path(db_path).exists():
+        os.remove(db_path)
+        logging.info(f"Database file deleted: {db_path}")
+        return True
+    else:
+        logging.warning(f"Database file not found: {db_path}")
+        return False
 
 
 def load_zp_stb(zp_stb_path: Optional[str] = None) -> Optional[pd.DataFrame]:
@@ -595,10 +709,12 @@ def _process_single_source(
     args: tuple,
     zp_stb_df: Optional[pd.DataFrame],
     db_path: str,
-    use_tap: bool = False
+    use_tap: bool = False,
+    max_attempts: int = 4
 ) -> Tuple[str, bool, str]:
     """
     単一の天体を処理（並列処理用）
+    セマフォによるクエリ数制限とリトライロジック付き
     
     Parameters:
     -----------
@@ -610,6 +726,8 @@ def _process_single_source(
         データベースパス
     use_tap : bool
         TAPクエリを使用するか
+    max_attempts : int
+        最大リトライ回数
     
     Returns:
     --------
@@ -621,28 +739,45 @@ def _process_single_source(
     dec = args[2]
     allwise_id = args[3] if len(args) > 3 else None
     
-    # 各スレッドで独自の接続を作成
-    conn = sqlite3.connect(db_path, check_same_thread=False)
+    logging.info(f"START source {source_id}")
     
-    try:
-        if use_tap and allwise_id:
-            w1_result, w2_result = get_neowise_by_allwise_tap(
-                allwise_id, source_id, ra, dec, conn, zp_stb_df, save_raw=True
-            )
-        else:
-            w1_result, w2_result = get_neowise_raw_data(
-                ra, dec, source_id, conn, zp_stb_df, save_raw=True
-            )
-        
-        conn.close()
-        
-        if not w1_result.empty or not w2_result.empty:
-            return (source_id, True, "Success")
-        else:
-            return (source_id, False, "No valid data")
-    except Exception as e:
-        conn.close()
-        return (source_id, False, str(e))
+    # 各スレッドで独自の接続を作成
+    conn = sqlite3.connect(db_path, check_same_thread=False, timeout=10)
+    
+    for attempt in range(max_attempts):
+        try:
+            # セマフォでIRSAクエリ数を制限
+            with query_semaphore:
+                if use_tap and allwise_id:
+                    w1_result, w2_result = get_neowise_by_allwise_tap(
+                        allwise_id, source_id, ra, dec, conn, zp_stb_df, save_raw=True
+                    )
+                else:
+                    w1_result, w2_result = get_neowise_raw_data(
+                        ra, dec, source_id, conn, zp_stb_df, save_raw=True
+                    )
+            
+            conn.close()
+            
+            if not w1_result.empty or not w2_result.empty:
+                logging.info(f"SUCCESS source {source_id}")
+                return (source_id, True, "Success")
+            else:
+                logging.warning(f"No valid data for source {source_id}")
+                return (source_id, False, "No valid data")
+                
+        except Exception as e:
+            if attempt < max_attempts - 1:
+                wait_time = 2 ** attempt  # exponential backoff
+                logging.warning(f"Attempt {attempt+1} failed for {source_id}: {e}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                conn.close()
+                logging.error(f"FAILED source {source_id} after {max_attempts} attempts: {e}")
+                return (source_id, False, str(e))
+    
+    conn.close()
+    return (source_id, False, "Max attempts exceeded")
 
 
 def batch_process_sources_parallel(
@@ -672,6 +807,9 @@ def batch_process_sources_parallel(
     # データベース作成（メインスレッドで）
     conn = create_neowise_database(db_path)
     conn.close()
+    
+    # IRSAセッションの準備（コネクションプールとリトライ設定）
+    prepare_irsa_session(pool_maxsize=num_workers * 2, max_retries=3, backoff_factor=1.0)
     
     print(f"Processing {len(source_list)} sources with {num_workers} workers...")
     if use_tap:
@@ -779,7 +917,7 @@ def main():
     parser.add_argument(
         '--sources', '-s',
         type=str,
-        required=True,
+        required=False,
         help='天体リストのCSVファイル (source_id,ra,dec[,AllWISE_ID])'
     )
     parser.add_argument(
@@ -810,8 +948,36 @@ def main():
         action='store_true',
         help='TAP検索を使用（AllWISE_IDカラムが必要、高速）'
     )
+    parser.add_argument(
+        '--clear',
+        action='store_true',
+        help='データベースの全データをクリア（再実行前に使用）'
+    )
+    parser.add_argument(
+        '--drop',
+        action='store_true',
+        help='データベースファイルを削除'
+    )
     
     args = parser.parse_args()
+    
+    # データベースクリア処理
+    if args.clear:
+        clear_database(args.output)
+        if not args.sources:
+            return
+    
+    # データベース削除処理
+    if args.drop:
+        drop_database(args.output)
+        if not args.sources:
+            return
+    
+    # sources引数が必要
+    if not args.sources:
+        print("Error: --sources is required for data processing")
+        print("       Use --clear or --drop alone to manage the database")
+        return
     
     # 天体リストを読み込み
     sources_df = pd.read_csv(args.sources)
