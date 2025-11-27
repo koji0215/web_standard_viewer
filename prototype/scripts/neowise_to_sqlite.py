@@ -108,7 +108,7 @@ def create_neowise_database(db_path: str) -> sqlite3.Connection:
             source_id TEXT NOT NULL,
             band TEXT NOT NULL,
             epoch_id INTEGER NOT NULL,
-            mjd_mean REAL NOT NULL,
+            mjd_mean INTEGER NOT NULL,
             mag_mean REAL,
             mag_se REAL,
             mag_lim REAL,
@@ -288,8 +288,13 @@ def _save_raw_observations(
         else:
             band_df['mpro_corrected'] = band_df[mag_col]
         
-        # SQLiteに挿入
+        # SQLiteに挿入（等級データは小数点以下4桁に丸める）
         for _, row in band_df.iterrows():
+            # mpro, sigmpro, mpro_corrected を小数点以下4桁に丸める
+            mpro_rounded = round(row[mag_col], 4) if pd.notna(row[mag_col]) else None
+            sigmpro_rounded = round(row[unc_col], 4) if pd.notna(row[unc_col]) else None
+            mpro_corrected_rounded = round(row['mpro_corrected'], 4) if pd.notna(row['mpro_corrected']) else None
+            
             cursor.execute('''
                 INSERT INTO neowise_raw_observations 
                 (source_id, mjd, band, mpro, sigmpro, cc_flags, ph_qual, moon_masked,
@@ -299,8 +304,8 @@ def _save_raw_observations(
                 source_id,
                 row['mjd'],
                 band,
-                row[mag_col],
-                row[unc_col],
+                mpro_rounded,
+                sigmpro_rounded,
                 row.get('cc_flags', ''),
                 row.get('ph_qual', ''),
                 row.get('moon_masked', ''),
@@ -312,7 +317,7 @@ def _save_raw_observations(
                 row.get('qual_frame', 0.0),
                 row.get(sky_col) if pd.notna(row.get(sky_col)) else None,
                 row.get('scan_id', ''),
-                row['mpro_corrected']
+                mpro_corrected_rounded
             ))
 
 
@@ -441,8 +446,16 @@ def _process_band_with_default_filter(
     result = result.drop(columns=['flux_mean', 'flux_error_sq_sum', 'flux_count'])
     result = result.sort_values('mjd').reset_index(drop=True)
     
-    # SQLiteに保存
+    # SQLiteに保存（mjd_meanは整数、等級データは小数点以下4桁に丸める）
     for _, row in result.iterrows():
+        # mjd_meanを整数に丸める
+        mjd_mean_rounded = int(round(row['mjd']))
+        # mag_mean, mag_se, mag_limを小数点以下4桁に丸める
+        mag_mean_rounded = round(row['mag_mean'], 4) if pd.notna(row['mag_mean']) else None
+        mag_se_rounded = round(row['mag_se'], 4) if pd.notna(row['mag_se']) else None
+        mag_lim_rounded = round(row['mag_lim'], 4) if pd.notna(row['mag_lim']) and not np.isnan(row['mag_lim']) else None
+        snr_rounded = round(row['snr'], 2) if pd.notna(row['snr']) and not np.isnan(row['snr']) else None
+        
         cursor.execute('''
             INSERT INTO neowise_epoch_summary 
             (source_id, band, epoch_id, mjd_mean, mag_mean, mag_se, mag_lim, n_points, snr, filter_applied)
@@ -451,12 +464,12 @@ def _process_band_with_default_filter(
             source_id,
             band,
             int(row['epoch_id']),
-            row['mjd'],
-            row['mag_mean'],
-            row['mag_se'],
-            row['mag_lim'] if not np.isnan(row['mag_lim']) else None,
+            mjd_mean_rounded,
+            mag_mean_rounded,
+            mag_se_rounded,
+            mag_lim_rounded,
             int(row['n_points']),
-            row['snr'] if not np.isnan(row['snr']) else None,
+            snr_rounded,
             'default'
         ))
     
