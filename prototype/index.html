@@ -280,17 +280,31 @@
         async function loadSampleList() {
             try {
                 const response = await fetch(`${API_BASE_URL}/api/list`);
+                
+                if (!response.ok) {
+                    console.warn('サンプルリストの取得に失敗しました（サーバー未起動の可能性）');
+                    return;
+                }
+                
                 const data = await response.json();
                 
                 const container = document.getElementById('sampleButtons');
                 container.innerHTML = '';
                 
+                // neowise_sourcesが存在するかチェック
+                const sources = data.neowise_sources || data.sources || [];
+                
+                if (sources.length === 0) {
+                    container.innerHTML = '<span style="color: #888;">データがありません</span>';
+                    return;
+                }
+                
                 // 最初の10個のみ表示
-                data.neowise_sources.slice(0, 10).forEach(sourceId => {
+                sources.slice(0, 10).forEach(sourceId => {
                     const btn = document.createElement('button');
                     btn.className = 'sample-btn';
-                    btn.textContent = sourceId.substring(0, 10) + '...';
-                    btn.title = sourceId;
+                    btn.textContent = String(sourceId).substring(0, 10) + '...';
+                    btn.title = String(sourceId);
                     btn.onclick = () => {
                         document.getElementById('sourceId').value = sourceId;
                         loadLightcurves();
@@ -299,6 +313,7 @@
                 });
             } catch (error) {
                 console.error('サンプルリストの読み込みに失敗:', error);
+                // エラー時はサンプルリストを非表示にしない（空のまま）
             }
         }
 
