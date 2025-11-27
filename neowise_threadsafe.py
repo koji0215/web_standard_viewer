@@ -1,4 +1,24 @@
 # neowise_threadsafe.py
+"""
+Thread-safe NEOWISE data retrieval with robust retry logic for IRSA/astroquery TAP queries.
+
+This module provides resilient querying of NEOWISE data from IRSA with:
+- Connection pooling and automatic retry via requests.Session
+- Semaphore-based concurrency limiting
+- Exponential backoff on failures
+- Thread-safe SQLite database operations
+
+External dependencies (must be imported or defined before use):
+- create_neowise_database: Function to create/initialize the database
+- save_raw_observations: Function to save raw observation data
+- process_band_and_save_epochs: Function to process band data and save epochs
+
+Tuning guidance:
+- num_workers: Number of ThreadPoolExecutor workers (default 4, reduce to 2 for higher success rate)
+- MAX_CONCURRENT_QUERIES: Concurrent IRSA query limit (default 4)
+- max_attempts: Retry attempts per query (default 4)
+- pool_maxsize: Connection pool size (default 50)
+"""
 import logging
 import sqlite3
 import threading
@@ -9,24 +29,24 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-# astro imports
+# Astronomy imports
 import astropy.coordinates as coord
 import astropy.units as u
 from astroquery.irsa import Irsa
 import pyvo
 from pyvo.dal import exceptions as pyvo_exceptions
 
-# ログ設定
+# Logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
-# DB ロック（sqlite はスレッドセーフでないので必要）
+# DB lock (required because sqlite is not fully thread-safe)
 db_lock = threading.Lock()
 
-# セマフォで「同時に発行する IRSA クエリ数」を制限（executor の workers とは別）
+# Semaphore to limit concurrent IRSA queries (separate from executor workers)
 MAX_CONCURRENT_QUERIES = 4
 query_semaphore = threading.BoundedSemaphore(MAX_CONCURRENT_QUERIES)
 
-# requests セッションを作って Irsa に流用（コネクションプールと retry 設定）
+# Create requests session for Irsa (connection pooling and retry settings)
 def prepare_irsa_session(pool_maxsize=50, max_retries=3, backoff_factor=1.0):
     session = requests.Session()
     retries = Retry(
@@ -43,13 +63,13 @@ def prepare_irsa_session(pool_maxsize=50, max_retries=3, backoff_factor=1.0):
     logging.info("Prepared Irsa._session with pool_maxsize=%s", pool_maxsize)
     return session
 
-# 実際のワーカー
+# Main worker function
 def get_neowise_threadsafe(ra, dec, source_id, db_path, zp_stb_df, max_attempts=4):
     logging.info(f"START source {source_id}")
     conn = sqlite3.connect(db_path, check_same_thread=False, timeout=10)
     cursor = conn.cursor()
 
-    # query_region を semaphore で保護して同時実行数を制限
+    # Protect query_region with semaphore to limit concurrent requests
     attempt = 0
     while attempt < max_attempts:
         attempt += 1
@@ -61,7 +81,7 @@ def get_neowise_threadsafe(ra, dec, source_id, db_path, zp_stb_df, max_attempts=
                     radius='0d0m5s',
                     columns="ra,dec,allwise_cntr,w1mpro,w1sigmpro,w1rchi2,w1sat,w1sky,w2mpro,w2sigmpro,w2rchi2,w2sat,w2sky,cc_flags,sso_flg,qi_fact,ph_qual,qual_frame,moon_masked,saa_sep,mjd,scan_id"
                 )
-            # 成功すればループを抜ける
+            # Success - exit retry loop
             break
         except (pyvo_exceptions.DALFormatError, requests.exceptions.RequestException, ConnectionError, Exception) as e:
             logging.warning("source %s attempt %d/%d failed: %s", source_id, attempt, max_attempts, e)
@@ -69,12 +89,12 @@ def get_neowise_threadsafe(ra, dec, source_id, db_path, zp_stb_df, max_attempts=
                 conn.close()
                 logging.exception("source %s - query/extract failed", source_id)
                 return (source_id, False, str(e))
-            # 指数バックオフ（jitter を入れるとより安全）
+            # Exponential backoff (add jitter for better safety)
             sleep_time = (2 ** (attempt - 1)) + (0.1 * (attempt))
             logging.info("sleeping %.1f s before retry", sleep_time)
             time.sleep(sleep_time)
 
-    # 以降は元の処理（例: table.sort, to_pandas など）
+    # Post-query processing (sort table, convert to pandas, etc.)
     try:
         table.sort('mjd')
         table['allwise_cntr'] = table['allwise_cntr'].astype(str)
@@ -120,16 +140,23 @@ def get_neowise_threadsafe(ra, dec, source_id, db_path, zp_stb_df, max_attempts=
     return (source_id, True, "Success")
 
 
-# 実行時の準備例
+# Example usage (runtime preparation)
 if __name__ == "__main__":
+    # NOTE: The following external functions/variables must be defined before running:
+    # - create_neowise_database(db_path): Function to create/initialize the database
+    # - save_raw_observations(raw_df, source_id, zp_stb_df, cursor): Function to save raw observations
+    # - process_band_and_save_epochs(df, band, source_id, zp_stb_df, cursor): Function to process band data
+    # - sources: Iterable of (source_id, ra, dec) tuples to process
+    # - zp_stb: Zero-point stability DataFrame
+
     db_path = "neowise_target_region_2.db"
     conn = create_neowise_database(db_path)
     conn.close()
 
-    # セッション準備（pool を必要に応じて増やす）
+    # Prepare session (increase pool size as needed)
     prepare_irsa_session(pool_maxsize=50, max_retries=3, backoff_factor=1.0)
 
-    num_workers = 4  # 必要なら 2 に落とすと成功率が上がることが多い
+    num_workers = 4  # Reduce to 2 for higher success rate if needed
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = {
             executor.submit(get_neowise_threadsafe, ra, dec, source_id, db_path, zp_stb): source_id
@@ -145,4 +172,4 @@ if __name__ == "__main__":
                 continue
             if not success:
                 print(sid, "FAILED:", msg)
-    logging.info("完了!")
+    logging.info("Completed!")
