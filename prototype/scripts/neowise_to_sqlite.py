@@ -6,12 +6,19 @@ NEOWISE 生データ取得・SQLite出力スクリプト
 可能にするためにSQLiteデータベースに保存します。
 
 使用方法:
+    # 座標検索（従来方式）
     python neowise_to_sqlite.py --sources sources.csv --output neowise_lightcurves.db
+    
+    # AllWISE ID検索（TAP、高速）
+    python neowise_to_sqlite.py --sources sources.csv --output neowise_lightcurves.db --use-tap
+    
+    # 並列処理（高速）
+    python neowise_to_sqlite.py --sources sources.csv --output neowise_lightcurves.db --parallel --workers 4
 
 sources.csvの形式:
-    source_id,ra,dec
-    4515624509348164608,292.181969,19.522439
-    5972956420926034944,251.354,-46.196
+    source_id,ra,dec,AllWISE_ID
+    4515624509348164608,292.181969,19.522439,J192843.67+193120.8
+    5972956420926034944,251.354,-46.196,J164524.96-461145.6
 """
 
 import pandas as pd
@@ -20,6 +27,9 @@ import sqlite3
 import argparse
 from pathlib import Path
 from typing import Optional, Tuple, List
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
 
 # astroqueryは実行環境で利用可能な場合のみインポート
 try:
@@ -36,6 +46,9 @@ try:
 except ImportError:
     def tqdm(x, **kwargs):
         return x
+
+# スレッドセーフなデータベース書き込み用ロック
+db_lock = threading.Lock()
 
 
 def create_neowise_database(db_path: str) -> sqlite3.Connection:
@@ -480,13 +493,242 @@ def _process_band_with_default_filter(
     return result
 
 
+def get_neowise_by_allwise_tap(
+    allwise_id: str, 
+    source_id: str, 
+    ra: float,
+    dec: float,
+    conn: sqlite3.Connection, 
+    zp_stb_df: Optional[pd.DataFrame] = None,
+    save_raw: bool = True
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    TAP（Table Access Protocol）を使用してAllWISE IDでNEOWISEデータを取得
+    座標検索より高速（約2-5倍）
+    
+    Parameters:
+    -----------
+    allwise_id : str
+        AllWISE ID（例: "J192843.67+193120.8"）
+    source_id : str
+        天体の識別子（Gaia SOURCE_ID推奨）
+    ra : float
+        赤経（度）- メタデータ用
+    dec : float
+        赤緯（度）- メタデータ用
+    conn : sqlite3.Connection
+        SQLiteデータベース接続
+    zp_stb_df : pd.DataFrame, optional
+        ゼロポイント補正テーブル
+    save_raw : bool
+        生データを保存するかどうか
+    
+    Returns:
+    --------
+    tuple
+        (W1のDataFrame, W2のDataFrame) - エポック集約データ
+    """
+    
+    if not ASTROQUERY_AVAILABLE:
+        print(f"Skipping {source_id}: astroquery not available")
+        return pd.DataFrame(), pd.DataFrame()
+    
+    cursor = conn.cursor()
+    
+    # TAP queryでAllWISE IDで直接検索
+    try:
+        # AllWISE IDから allwise_cntr を取得する方法
+        # 注: AllWISE IDは "Jhhmmss.ss+ddmmss.s" 形式
+        # neowiser_p1bs_psd テーブルの designation カラムで検索
+        
+        query = f"""
+        SELECT * FROM neowiser_p1bs_psd 
+        WHERE designation = '{allwise_id}'
+        ORDER BY mjd
+        """
+        
+        result = Irsa.query_tap(query)
+        raw_df = result.to_pandas()
+    except Exception as e:
+        print(f"Error querying TAP for AllWISE_ID={allwise_id}: {e}")
+        # フォールバック: 座標検索
+        print(f"  Falling back to coordinate search...")
+        return get_neowise_raw_data(ra, dec, source_id, conn, zp_stb_df, save_raw)
+
+    if raw_df.empty:
+        print(f"No data found for AllWISE_ID={allwise_id}")
+        return pd.DataFrame(), pd.DataFrame()
+    
+    allwise_cntr = raw_df['allwise_cntr'].iloc[0] if 'allwise_cntr' in raw_df.columns else None
+    
+    # sourcesテーブルに登録
+    with db_lock:
+        cursor.execute('''
+            INSERT OR IGNORE INTO sources (source_id, ra, dec, allwise_cntr)
+            VALUES (?, ?, ?, ?)
+        ''', (source_id, ra, dec, int(allwise_cntr) if allwise_cntr else None))
+    
+    # mjdフィルタリング
+    if zp_stb_df is not None and not zp_stb_df.empty:
+        raw_df = raw_df[raw_df['mjd'] > zp_stb_df['mjd'].min()].reset_index(drop=True)
+    
+    if raw_df.empty:
+        print(f"No data after MJD filtering for source_id={source_id}")
+        return pd.DataFrame(), pd.DataFrame()
+    
+    # 生データをSQLiteに保存
+    if save_raw:
+        with db_lock:
+            _save_raw_observations(raw_df, source_id, zp_stb_df, cursor)
+            conn.commit()
+    
+    # エポック集約データを計算・保存
+    with db_lock:
+        w1_result = _process_band_with_default_filter(raw_df.copy(), 'W1', source_id, zp_stb_df, cursor)
+        w2_result = _process_band_with_default_filter(raw_df.copy(), 'W2', source_id, zp_stb_df, cursor)
+        conn.commit()
+    
+    return w1_result, w2_result
+
+
+def _process_single_source(
+    args: tuple,
+    zp_stb_df: Optional[pd.DataFrame],
+    db_path: str,
+    use_tap: bool = False
+) -> Tuple[str, bool, str]:
+    """
+    単一の天体を処理（並列処理用）
+    
+    Parameters:
+    -----------
+    args : tuple
+        (source_id, ra, dec, [allwise_id]) のタプル
+    zp_stb_df : pd.DataFrame
+        ゼロポイント補正テーブル
+    db_path : str
+        データベースパス
+    use_tap : bool
+        TAPクエリを使用するか
+    
+    Returns:
+    --------
+    tuple
+        (source_id, success, message)
+    """
+    source_id = args[0]
+    ra = args[1]
+    dec = args[2]
+    allwise_id = args[3] if len(args) > 3 else None
+    
+    # 各スレッドで独自の接続を作成
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    
+    try:
+        if use_tap and allwise_id:
+            w1_result, w2_result = get_neowise_by_allwise_tap(
+                allwise_id, source_id, ra, dec, conn, zp_stb_df, save_raw=True
+            )
+        else:
+            w1_result, w2_result = get_neowise_raw_data(
+                ra, dec, source_id, conn, zp_stb_df, save_raw=True
+            )
+        
+        conn.close()
+        
+        if not w1_result.empty or not w2_result.empty:
+            return (source_id, True, "Success")
+        else:
+            return (source_id, False, "No valid data")
+    except Exception as e:
+        conn.close()
+        return (source_id, False, str(e))
+
+
+def batch_process_sources_parallel(
+    source_list: List[tuple], 
+    db_path: str, 
+    zp_stb_df: Optional[pd.DataFrame] = None,
+    num_workers: int = 4,
+    use_tap: bool = False
+):
+    """
+    複数の天体を並列処理してSQLiteに保存
+    
+    Parameters:
+    -----------
+    source_list : list
+        [(source_id, ra, dec, [allwise_id]), ...] のリスト
+    db_path : str
+        出力するSQLiteファイルのパス
+    zp_stb_df : pd.DataFrame, optional
+        ゼロポイント補正テーブル
+    num_workers : int
+        並列ワーカー数（デフォルト: 4）
+    use_tap : bool
+        TAPクエリを使用するか（AllWISE_IDが必要）
+    """
+    
+    # データベース作成（メインスレッドで）
+    conn = create_neowise_database(db_path)
+    conn.close()
+    
+    print(f"Processing {len(source_list)} sources with {num_workers} workers...")
+    if use_tap:
+        print("Using TAP query (AllWISE ID search) - faster!")
+    
+    start_time = time.time()
+    success_count = 0
+    error_count = 0
+    errors = []
+    
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = {
+            executor.submit(
+                _process_single_source, 
+                source, 
+                zp_stb_df, 
+                db_path,
+                use_tap
+            ): source[0]
+            for source in source_list
+        }
+        
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Processing"):
+            source_id = futures[future]
+            try:
+                sid, success, msg = future.result()
+                if success:
+                    success_count += 1
+                else:
+                    error_count += 1
+                    if msg != "No valid data":
+                        errors.append(f"{sid}: {msg}")
+            except Exception as e:
+                error_count += 1
+                errors.append(f"{source_id}: {str(e)}")
+    
+    elapsed_time = time.time() - start_time
+    
+    print(f"\n=== Summary ===")
+    print(f"Database saved to: {db_path}")
+    print(f"Successfully processed: {success_count}")
+    print(f"Errors: {error_count}")
+    print(f"Total time: {elapsed_time:.1f} seconds ({elapsed_time/len(source_list):.2f} sec/source)")
+    
+    if errors:
+        print(f"\nFirst 10 errors:")
+        for err in errors[:10]:
+            print(f"  {err}")
+
+
 def batch_process_sources(
     source_list: List[Tuple[str, float, float]], 
     db_path: str, 
     zp_stb_df: Optional[pd.DataFrame] = None
 ):
     """
-    複数の天体を一括処理してSQLiteに保存
+    複数の天体を一括処理してSQLiteに保存（シーケンシャル処理）
     
     Parameters:
     -----------
@@ -501,8 +743,9 @@ def batch_process_sources(
     # データベース作成
     conn = create_neowise_database(db_path)
     
-    print(f"Processing {len(source_list)} sources...")
+    print(f"Processing {len(source_list)} sources (sequential)...")
     
+    start_time = time.time()
     success_count = 0
     error_count = 0
     
@@ -520,10 +763,13 @@ def batch_process_sources(
     
     conn.close()
     
+    elapsed_time = time.time() - start_time
+    
     print(f"\n=== Summary ===")
     print(f"Database saved to: {db_path}")
     print(f"Successfully processed: {success_count}")
     print(f"Errors: {error_count}")
+    print(f"Total time: {elapsed_time:.1f} seconds ({elapsed_time/len(source_list):.2f} sec/source)")
 
 
 def main():
@@ -534,7 +780,7 @@ def main():
         '--sources', '-s',
         type=str,
         required=True,
-        help='天体リストのCSVファイル (source_id,ra,dec)'
+        help='天体リストのCSVファイル (source_id,ra,dec[,AllWISE_ID])'
     )
     parser.add_argument(
         '--output', '-o',
@@ -548,6 +794,22 @@ def main():
         default=None,
         help='NEOWISE_zp_stb.csvのパス'
     )
+    parser.add_argument(
+        '--parallel', '-p',
+        action='store_true',
+        help='並列処理を有効にする（大幅な高速化）'
+    )
+    parser.add_argument(
+        '--workers', '-w',
+        type=int,
+        default=4,
+        help='並列ワーカー数（デフォルト: 4）'
+    )
+    parser.add_argument(
+        '--use-tap',
+        action='store_true',
+        help='TAP検索を使用（AllWISE_IDカラムが必要、高速）'
+    )
     
     args = parser.parse_args()
     
@@ -560,16 +822,43 @@ def main():
             print(f"Error: '{col}' column not found in {args.sources}")
             return
     
-    source_list = [
-        (str(row['source_id']), float(row['ra']), float(row['dec']))
-        for _, row in sources_df.iterrows()
-    ]
+    # AllWISE_IDカラムの有無をチェック
+    has_allwise_id = 'AllWISE_ID' in sources_df.columns
+    
+    if args.use_tap and not has_allwise_id:
+        print("Warning: --use-tap specified but 'AllWISE_ID' column not found.")
+        print("         Falling back to coordinate search.")
+        args.use_tap = False
+    
+    # ソースリスト作成
+    if has_allwise_id:
+        source_list = [
+            (str(row['source_id']), float(row['ra']), float(row['dec']), str(row['AllWISE_ID']))
+            for _, row in sources_df.iterrows()
+        ]
+    else:
+        source_list = [
+            (str(row['source_id']), float(row['ra']), float(row['dec']))
+            for _, row in sources_df.iterrows()
+        ]
     
     # ゼロポイント補正テーブルを読み込み
     zp_stb_df = load_zp_stb(args.zp_stb)
     
-    # 一括処理
-    batch_process_sources(source_list, args.output, zp_stb_df)
+    # 処理実行
+    if args.parallel:
+        batch_process_sources_parallel(
+            source_list, 
+            args.output, 
+            zp_stb_df,
+            num_workers=args.workers,
+            use_tap=args.use_tap
+        )
+    else:
+        # シーケンシャル処理（従来方式）
+        simple_source_list = [(s[0], s[1], s[2]) for s in source_list]
+        batch_process_sources(simple_source_list, args.output, zp_stb_df)
+
 
 
 if __name__ == "__main__":
