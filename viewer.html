@@ -436,6 +436,130 @@
         .accordion-inner {
             padding: 10px 15px;
         }
+
+        /* Lightcurve Panel Styles */
+        .lightcurve-panel {
+            width: 450px;
+            background-color: #2a2a2a;
+            border-left: 2px solid #444;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .lightcurve-header {
+            padding: 15px;
+            background-color: #333;
+            border-bottom: 2px solid #444;
+        }
+
+        .lightcurve-header h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #4CAF50;
+        }
+
+        .lightcurve-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .chart-container {
+            background-color: #1a1a1a;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+
+        .chart-container h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #4CAF50;
+        }
+
+        .chart-canvas-container {
+            position: relative;
+            height: 200px;
+        }
+
+        .lightcurve-controls {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+
+        .lc-toggle-btn {
+            padding: 6px 12px;
+            background-color: #444;
+            color: #aaa;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .lc-toggle-btn:hover {
+            background-color: #555;
+        }
+
+        .lc-toggle-btn.active {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .lightcurve-status {
+            text-align: center;
+            color: #888;
+            padding: 40px;
+            font-size: 14px;
+        }
+
+        .lightcurve-info {
+            background-color: #1a1a1a;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+        .lightcurve-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .lightcurve-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .lightcurve-info-label {
+            color: #888;
+        }
+
+        .lightcurve-info-value {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .api-status {
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin-bottom: 10px;
+        }
+
+        .api-status.connected {
+            background-color: #1a4a1a;
+            color: #4a4;
+        }
+
+        .api-status.disconnected {
+            background-color: #4a1a1a;
+            color: #a44;
+        }
     </style>
 </head>
 <body>
@@ -515,6 +639,64 @@
                 </div>
             </div>
         </div>
+
+        <!-- Lightcurve Panel -->
+        <div class="lightcurve-panel">
+            <div class="lightcurve-header">
+                <h2>📈 Lightcurve</h2>
+                <div id="api-status" class="api-status disconnected">API: Checking...</div>
+            </div>
+            <div class="lightcurve-content">
+                <div id="lightcurve-status" class="lightcurve-status">
+                    星を選択するとライトカーブが表示されます<br>
+                    <small>※ ライトカーブAPIサーバー (localhost:8000) が必要です</small>
+                </div>
+                
+                <div id="lightcurve-data" style="display: none;">
+                    <!-- Star Info -->
+                    <div class="lightcurve-info" style="margin-bottom: 15px;">
+                        <div class="lightcurve-info-row">
+                            <span class="lightcurve-info-label">SOURCE ID:</span>
+                            <span id="lc-source-id" class="lightcurve-info-value">-</span>
+                        </div>
+                        <div class="lightcurve-info-row">
+                            <span class="lightcurve-info-label">RA:</span>
+                            <span id="lc-ra" class="lightcurve-info-value">-</span>
+                        </div>
+                        <div class="lightcurve-info-row">
+                            <span class="lightcurve-info-label">Dec:</span>
+                            <span id="lc-dec" class="lightcurve-info-value">-</span>
+                        </div>
+                        <div class="lightcurve-info-row">
+                            <span class="lightcurve-info-label">NEOWISE観測数:</span>
+                            <span id="lc-obs-count" class="lightcurve-info-value">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Data Mode Toggle -->
+                    <div class="lightcurve-controls">
+                        <button id="lc-btn-epoch" class="lc-toggle-btn active">エポック集約</button>
+                        <button id="lc-btn-raw" class="lc-toggle-btn">生データ</button>
+                    </div>
+
+                    <!-- NEOWISE Chart -->
+                    <div class="chart-container">
+                        <h3>NEOWISE Lightcurve</h3>
+                        <div class="chart-canvas-container">
+                            <canvas id="neowise-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- ASASSN Chart (if available) -->
+                    <div id="asassn-chart-container" class="chart-container" style="display: none;">
+                        <h3>ASASSN Lightcurve</h3>
+                        <div class="chart-canvas-container">
+                            <canvas id="asassn-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- MIMIZUKU Dual Field Modal -->
@@ -548,6 +730,8 @@
             integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
             crossorigin="anonymous"
             referrerpolicy="no-referrer"></script>
+    <!-- Chart.js for lightcurve display -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="app.js"></script>
     <script>
         // Initialize viewer with data from sessionStorage
@@ -703,7 +887,301 @@
                     }
                 });
             }
+
+            // Initialize lightcurve module
+            window.lightcurveModule = new LightcurveModule();
         });
+
+        // Lightcurve Module
+        class LightcurveModule {
+            constructor() {
+                this.apiBaseUrl = 'http://localhost:8000';
+                this.neowiseChart = null;
+                this.asassnChart = null;
+                this.currentDataMode = 'epoch'; // 'epoch' or 'raw'
+                this.currentSourceId = null;
+                this.apiAvailable = false;
+
+                this.init();
+            }
+
+            init() {
+                this.checkApiConnection();
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                // Data mode toggle buttons
+                const btnEpoch = document.getElementById('lc-btn-epoch');
+                const btnRaw = document.getElementById('lc-btn-raw');
+                
+                if (btnEpoch) {
+                    btnEpoch.addEventListener('click', () => this.setDataMode('epoch'));
+                }
+                if (btnRaw) {
+                    btnRaw.addEventListener('click', () => this.setDataMode('raw'));
+                }
+            }
+
+            async checkApiConnection() {
+                const statusEl = document.getElementById('api-status');
+                try {
+                    const response = await fetch(`${this.apiBaseUrl}/health`, { 
+                        method: 'GET',
+                        signal: AbortSignal.timeout(3000)
+                    });
+                    if (response.ok) {
+                        this.apiAvailable = true;
+                        if (statusEl) {
+                            statusEl.textContent = 'API: Connected ✓';
+                            statusEl.className = 'api-status connected';
+                        }
+                    } else {
+                        throw new Error('API not responding');
+                    }
+                } catch (e) {
+                    this.apiAvailable = false;
+                    if (statusEl) {
+                        statusEl.textContent = 'API: Not connected (start app_custom.py)';
+                        statusEl.className = 'api-status disconnected';
+                    }
+                }
+            }
+
+            setDataMode(mode) {
+                this.currentDataMode = mode;
+                
+                // Update button states
+                document.getElementById('lc-btn-epoch')?.classList.toggle('active', mode === 'epoch');
+                document.getElementById('lc-btn-raw')?.classList.toggle('active', mode === 'raw');
+                
+                // Reload data if we have a source
+                if (this.currentSourceId) {
+                    this.loadLightcurve(this.currentSourceId);
+                }
+            }
+
+            async loadLightcurve(sourceId, ra, dec) {
+                if (!this.apiAvailable) {
+                    await this.checkApiConnection();
+                    if (!this.apiAvailable) {
+                        this.showStatus('ライトカーブAPIサーバーに接続できません。<br><small>prototype/backend で python app_custom.py を実行してください</small>');
+                        return;
+                    }
+                }
+
+                this.currentSourceId = sourceId;
+                this.showStatus('ライトカーブを読み込み中...');
+
+                try {
+                    // Build URL
+                    let url = `${this.apiBaseUrl}/api/lightcurve/neowise?`;
+                    if (sourceId) {
+                        url += `source_id=${encodeURIComponent(sourceId)}`;
+                    } else if (ra !== undefined && dec !== undefined) {
+                        url += `ra=${ra}&dec=${dec}`;
+                    }
+                    
+                    if (this.currentDataMode === 'raw') {
+                        url += '&raw=true';
+                    }
+
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.detail || 'データの取得に失敗しました');
+                    }
+
+                    const data = await response.json();
+                    this.displayLightcurve(data);
+
+                } catch (error) {
+                    console.error('Lightcurve fetch error:', error);
+                    this.showStatus(`エラー: ${error.message}`);
+                }
+            }
+
+            showStatus(message) {
+                const statusEl = document.getElementById('lightcurve-status');
+                const dataEl = document.getElementById('lightcurve-data');
+                
+                if (statusEl) {
+                    statusEl.innerHTML = message;
+                    statusEl.style.display = 'block';
+                }
+                if (dataEl) {
+                    dataEl.style.display = 'none';
+                }
+            }
+
+            displayLightcurve(data) {
+                const statusEl = document.getElementById('lightcurve-status');
+                const dataEl = document.getElementById('lightcurve-data');
+                
+                if (statusEl) statusEl.style.display = 'none';
+                if (dataEl) dataEl.style.display = 'block';
+
+                // Update info panel
+                document.getElementById('lc-source-id').textContent = data.source_id || '-';
+                document.getElementById('lc-ra').textContent = data.ra?.toFixed(6) || '-';
+                document.getElementById('lc-dec').textContent = data.dec?.toFixed(6) || '-';
+                
+                const modeLabel = this.currentDataMode === 'raw' ? '(生データ)' : '(エポック)';
+                document.getElementById('lc-obs-count').textContent = `${data.num_observations} ${modeLabel}`;
+
+                // Draw NEOWISE chart
+                this.drawNeowiseChart(data);
+            }
+
+            drawNeowiseChart(data) {
+                const ctx = document.getElementById('neowise-chart')?.getContext('2d');
+                if (!ctx) return;
+
+                if (this.neowiseChart) {
+                    this.neowiseChart.destroy();
+                }
+
+                // Prepare W1 and W2 data with error bars
+                const w1Data = data.observations
+                    .filter(obs => obs.w1_mag !== null)
+                    .map(obs => ({
+                        x: obs.mjd,
+                        y: obs.w1_mag,
+                        yMin: obs.w1_mag - (obs.w1_err || 0),
+                        yMax: obs.w1_mag + (obs.w1_err || 0),
+                        err: obs.w1_err || 0
+                    }));
+
+                const w2Data = data.observations
+                    .filter(obs => obs.w2_mag !== null)
+                    .map(obs => ({
+                        x: obs.mjd,
+                        y: obs.w2_mag,
+                        yMin: obs.w2_mag - (obs.w2_err || 0),
+                        yMax: obs.w2_mag + (obs.w2_err || 0),
+                        err: obs.w2_err || 0
+                    }));
+
+                const pointRadius = this.currentDataMode === 'raw' ? 2 : 3;
+
+                this.neowiseChart = new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [
+                            {
+                                label: 'W1 (3.4μm)',
+                                data: w1Data,
+                                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                pointRadius: pointRadius,
+                                errorBarColor: 'rgba(255, 99, 132, 0.5)'
+                            },
+                            {
+                                label: 'W2 (4.6μm)',
+                                data: w2Data,
+                                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                pointRadius: pointRadius,
+                                errorBarColor: 'rgba(54, 162, 235, 0.5)'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'MJD', color: '#ccc' },
+                                ticks: { color: '#ccc' },
+                                grid: { color: '#444' }
+                            },
+                            y: {
+                                title: { display: true, text: 'Magnitude', color: '#ccc' },
+                                reverse: true,
+                                ticks: { color: '#ccc' },
+                                grid: { color: '#444' }
+                            }
+                        },
+                        plugins: {
+                            legend: { labels: { color: '#ccc' } },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const point = context.raw;
+                                        return `${context.dataset.label}: ${point.y.toFixed(3)} ± ${point.err.toFixed(3)} mag`;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    plugins: [{
+                        id: 'errorBars',
+                        afterDatasetsDraw: function(chart) {
+                            const ctx = chart.ctx;
+                            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                                const meta = chart.getDatasetMeta(datasetIndex);
+                                if (!meta.hidden) {
+                                    meta.data.forEach((element, index) => {
+                                        const dataPoint = dataset.data[index];
+                                        if (dataPoint.yMin !== undefined && dataPoint.yMax !== undefined) {
+                                            const x = element.x;
+                                            const yMin = chart.scales.y.getPixelForValue(dataPoint.yMin);
+                                            const yMax = chart.scales.y.getPixelForValue(dataPoint.yMax);
+                                            
+                                            ctx.save();
+                                            ctx.strokeStyle = dataset.errorBarColor || dataset.borderColor;
+                                            ctx.lineWidth = 1;
+                                            
+                                            // Vertical error bar
+                                            ctx.beginPath();
+                                            ctx.moveTo(x, yMin);
+                                            ctx.lineTo(x, yMax);
+                                            ctx.stroke();
+                                            
+                                            // Top cap
+                                            ctx.beginPath();
+                                            ctx.moveTo(x - 2, yMin);
+                                            ctx.lineTo(x + 2, yMin);
+                                            ctx.stroke();
+                                            
+                                            // Bottom cap
+                                            ctx.beginPath();
+                                            ctx.moveTo(x - 2, yMax);
+                                            ctx.lineTo(x + 2, yMax);
+                                            ctx.stroke();
+                                            
+                                            ctx.restore();
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    }]
+                });
+            }
+        }
+
+        // Override selectStar to also load lightcurve
+        const originalSelectStar = SkyViewer.prototype.selectStar;
+        SkyViewer.prototype.selectStar = function(index) {
+            originalSelectStar.call(this, index);
+            
+            // Load lightcurve when star is selected
+            if (this.selectedStar && window.lightcurveModule) {
+                const star = this.selectedStar;
+                
+                // Try to get SOURCE_ID from star data
+                const sourceId = star.data?.SOURCE_ID || star.data?.source_id || star.data?.Source_id;
+                
+                if (sourceId) {
+                    window.lightcurveModule.loadLightcurve(sourceId);
+                } else {
+                    // Fall back to coordinate search
+                    window.lightcurveModule.loadLightcurve(null, star.ra, star.dec);
+                }
+            }
+        };
     </script>
 </body>
 </html>
