@@ -184,6 +184,45 @@
             background-color: #0052a3;
         }
 
+        .data-toggle {
+            display: flex;
+            gap: 0;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            background-color: #444;
+            color: #aaa;
+            border: 1px solid #555;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        .toggle-btn:last-child {
+            border-radius: 0 4px 4px 0;
+        }
+
+        .toggle-btn:hover {
+            background-color: #555;
+        }
+
+        .toggle-btn.active {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #4CAF50;
+        }
+
+        .data-mode-info {
+            color: #888;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
         @media (max-width: 1024px) {
             .charts-container {
                 grid-template-columns: 1fr;
@@ -206,6 +245,14 @@
                 <input type="number" id="ra" placeholder="RA (度)" step="0.000001">
                 <input type="number" id="dec" placeholder="Dec (度)" step="0.000001">
                 <button onclick="loadLightcurvesByCoord()">座標から表示</button>
+            </div>
+            <div class="control-row">
+                <label>データ表示:</label>
+                <div class="data-toggle">
+                    <button id="btnEpochData" class="toggle-btn active" onclick="setDataMode('epoch')">エポック集約データ</button>
+                    <button id="btnRawData" class="toggle-btn" onclick="setDataMode('raw')">生データ</button>
+                </div>
+                <span id="dataModeInfo" class="data-mode-info">エポック集約データを表示中</span>
             </div>
         </div>
 
@@ -247,7 +294,7 @@
 
         <div id="chartsContainer" class="charts-container" style="display: none;">
             <div class="chart-panel">
-                <h2>NEOWISE ライトカーブ</h2>
+                <h2 id="neowiseChartTitle">NEOWISE ライトカーブ</h2>
                 <div class="chart-container">
                     <canvas id="neowiseChart"></canvas>
                 </div>
@@ -273,9 +320,32 @@
         const API_BASE_URL = 'http://localhost:8000';
         let neowiseChart = null;
         let asassnChart = null;
+        let currentDataMode = 'epoch'; // 'epoch' or 'raw'
+        let currentSourceId = null;
 
         // ページ読み込み時にサンプルリストを取得
         window.addEventListener('DOMContentLoaded', loadSampleList);
+
+        function setDataMode(mode) {
+            currentDataMode = mode;
+            
+            // ボタンのアクティブ状態を更新
+            document.getElementById('btnEpochData').classList.toggle('active', mode === 'epoch');
+            document.getElementById('btnRawData').classList.toggle('active', mode === 'raw');
+            
+            // 表示情報を更新
+            const info = document.getElementById('dataModeInfo');
+            if (mode === 'epoch') {
+                info.textContent = 'エポック集約データを表示中';
+            } else {
+                info.textContent = '生データを表示中（フィルタリング前）';
+            }
+            
+            // すでにデータが表示されている場合は再読み込み
+            if (currentSourceId) {
+                loadLightcurves();
+            }
+        }
 
         async function loadSampleList() {
             try {
@@ -325,14 +395,15 @@
                 return;
             }
 
+            currentSourceId = sourceId;
             showLoading();
             hideError();
 
             try {
                 // NEOWISEとASASSNのデータを並行取得
                 const [neowiseData, asassnData] = await Promise.all([
-                    fetchLightcurve('neowise', sourceId),
-                    fetchLightcurve('asassn', sourceId)
+                    fetchLightcurve('neowise', sourceId, currentDataMode === 'raw'),
+                    fetchLightcurve('asassn', sourceId, false) // ASASSNは常にエポックデータ
                 ]);
 
                 displayLightcurves(neowiseData, asassnData);
@@ -369,10 +440,13 @@
             }
         }
 
-        async function fetchLightcurve(survey, sourceId) {
-            const response = await fetch(
-                `${API_BASE_URL}/api/lightcurve/${survey}?source_id=${encodeURIComponent(sourceId)}`
-            );
+        async function fetchLightcurve(survey, sourceId, raw = false) {
+            let url = `${API_BASE_URL}/api/lightcurve/${survey}?source_id=${encodeURIComponent(sourceId)}`;
+            if (raw && survey === 'neowise') {
+                url += '&raw=true';
+            }
+            
+            const response = await fetch(url);
 
             if (!response.ok) {
                 const error = await response.json();
@@ -401,7 +475,11 @@
             document.getElementById('infoAllwiseId').textContent = neowiseData.allwise_id || '-';
             document.getElementById('infoRa').textContent = neowiseData.ra.toFixed(6);
             document.getElementById('infoDec').textContent = neowiseData.dec.toFixed(6);
-            document.getElementById('infoNeowiseObs').textContent = neowiseData.num_observations;
+            
+            // データモードに応じて観測数の表示を変更
+            const neowiseObsCount = neowiseData.num_observations;
+            const obsLabel = currentDataMode === 'raw' ? `${neowiseObsCount} (生データ)` : `${neowiseObsCount} (エポック)`;
+            document.getElementById('infoNeowiseObs').textContent = obsLabel;
             document.getElementById('infoAsassnObs').textContent = asassnData.num_observations;
 
             document.getElementById('infoPanel').style.display = 'block';
@@ -421,22 +499,33 @@
                 neowiseChart.destroy();
             }
 
-            // W1とW2のデータを準備（エラーバー情報を含む）
-            const w1Data = data.observations.map(obs => ({
-                x: obs.mjd,
-                y: obs.w1_mag,
-                yMin: obs.w1_mag - obs.w1_err,
-                yMax: obs.w1_mag + obs.w1_err,
-                err: obs.w1_err
-            }));
+            // タイトルをデータモードに応じて変更
+            const chartTitle = currentDataMode === 'raw' ? 'NEOWISE 生データ' : 'NEOWISE エポック集約データ';
+            document.getElementById('neowiseChartTitle').textContent = chartTitle;
 
-            const w2Data = data.observations.map(obs => ({
-                x: obs.mjd,
-                y: obs.w2_mag,
-                yMin: obs.w2_mag - obs.w2_err,
-                yMax: obs.w2_mag + obs.w2_err,
-                err: obs.w2_err
-            }));
+            // W1とW2のデータを準備（エラーバー情報を含む）
+            const w1Data = data.observations
+                .filter(obs => obs.w1_mag !== null)
+                .map(obs => ({
+                    x: obs.mjd,
+                    y: obs.w1_mag,
+                    yMin: obs.w1_mag - (obs.w1_err || 0),
+                    yMax: obs.w1_mag + (obs.w1_err || 0),
+                    err: obs.w1_err || 0
+                }));
+
+            const w2Data = data.observations
+                .filter(obs => obs.w2_mag !== null)
+                .map(obs => ({
+                    x: obs.mjd,
+                    y: obs.w2_mag,
+                    yMin: obs.w2_mag - (obs.w2_err || 0),
+                    yMax: obs.w2_mag + (obs.w2_err || 0),
+                    err: obs.w2_err || 0
+                }));
+
+            // 生データの場合はポイントサイズを小さく
+            const pointRadius = currentDataMode === 'raw' ? 2 : 3;
 
             neowiseChart = new Chart(ctx, {
                 type: 'scatter',
@@ -447,7 +536,7 @@
                             data: w1Data,
                             backgroundColor: 'rgba(255, 99, 132, 0.6)',
                             borderColor: 'rgba(255, 99, 132, 1)',
-                            pointRadius: 3,
+                            pointRadius: pointRadius,
                             errorBarColor: 'rgba(255, 99, 132, 0.5)',
                             errorBarLineWidth: 1
                         },
@@ -456,7 +545,7 @@
                             data: w2Data,
                             backgroundColor: 'rgba(54, 162, 235, 0.6)',
                             borderColor: 'rgba(54, 162, 235, 1)',
-                            pointRadius: 3,
+                            pointRadius: pointRadius,
                             errorBarColor: 'rgba(54, 162, 235, 0.5)',
                             errorBarLineWidth: 1
                         }
