@@ -648,8 +648,8 @@
             </div>
             <div class="lightcurve-content">
                 <div id="lightcurve-status" class="lightcurve-status">
-                    星を選択するとライトカーブが表示されます<br>
-                    <small>※ ライトカーブAPIサーバー (localhost:8000) が必要です</small>
+                    Display lightcurve of Selected star<br>
+                    <small>※ lightcurve API server (localhost:8000) is necessary</small>
                 </div>
                 
                 <div id="lightcurve-data" style="display: none;">
@@ -668,15 +668,15 @@
                             <span id="lc-dec" class="lightcurve-info-value">-</span>
                         </div>
                         <div class="lightcurve-info-row">
-                            <span class="lightcurve-info-label">NEOWISE観測数:</span>
+                            <span class="lightcurve-info-label">NEOWISE data count:</span>
                             <span id="lc-obs-count" class="lightcurve-info-value">-</span>
                         </div>
                     </div>
 
                     <!-- Data Mode Toggle -->
                     <div class="lightcurve-controls">
-                        <button id="lc-btn-epoch" class="lc-toggle-btn active">エポック集約</button>
-                        <button id="lc-btn-raw" class="lc-toggle-btn">生データ</button>
+                        <button id="lc-btn-epoch" class="lc-toggle-btn active">epoch-averaged</button>
+                        <button id="lc-btn-raw" class="lc-toggle-btn">raw data</button>
                     </div>
 
                     <!-- NEOWISE Chart -->
@@ -972,13 +972,13 @@
                 if (!this.apiAvailable) {
                     await this.checkApiConnection();
                     if (!this.apiAvailable) {
-                        this.showStatus('ライトカーブAPIサーバーに接続できません。<br><small>prototype/backend で python app_custom.py を実行してください</small>');
+                        this.showStatus('Cannot connect to lightcurve API server.<br><small> run "python app_custom.py" at prototype/backend. </small>');
                         return;
                     }
                 }
 
                 this.currentSourceId = sourceId;
-                this.showStatus('ライトカーブを読み込み中...');
+                this.showStatus('Loading lightcurve...');
 
                 try {
                     // Build URL
@@ -997,7 +997,7 @@
                     
                     if (!response.ok) {
                         const error = await response.json();
-                        throw new Error(error.detail || 'データの取得に失敗しました');
+                        throw new Error(error.detail || 'Failed to obtain data データの取得に失敗しました');
                     }
 
                     const data = await response.json();
@@ -1005,7 +1005,7 @@
 
                 } catch (error) {
                     console.error('Lightcurve fetch error:', error);
-                    this.showStatus(`エラー: ${error.message}`);
+                    this.showStatus(`Error: ${error.message}`);
                 }
             }
 
