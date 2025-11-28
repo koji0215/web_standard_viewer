@@ -895,7 +895,8 @@
         // Lightcurve Module
         class LightcurveModule {
             constructor() {
-                this.apiBaseUrl = 'http://localhost:8000';
+                // Configuration - can be overridden via window.LIGHTCURVE_API_URL
+                this.apiBaseUrl = window.LIGHTCURVE_API_URL || 'http://localhost:8000';
                 this.neowiseChart = null;
                 this.asassnChart = null;
                 this.currentDataMode = 'epoch'; // 'epoch' or 'raw'
@@ -926,10 +927,16 @@
             async checkApiConnection() {
                 const statusEl = document.getElementById('api-status');
                 try {
+                    // Use AbortController with setTimeout for better browser compatibility
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    
                     const response = await fetch(`${this.apiBaseUrl}/health`, { 
                         method: 'GET',
-                        signal: AbortSignal.timeout(3000)
+                        signal: controller.signal
                     });
+                    clearTimeout(timeoutId);
+                    
                     if (response.ok) {
                         this.apiAvailable = true;
                         if (statusEl) {
