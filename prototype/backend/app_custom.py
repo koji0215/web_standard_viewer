@@ -165,10 +165,10 @@ def get_neowise_lightcurve(
             
             source_id = closest['source_id']
         
-        # 天体情報を取得
+        # 天体情報を取得（source_idを文字列と整数の両方で検索）
         source = pd.read_sql_query(
-            "SELECT * FROM sources WHERE source_id = ?", 
-            conn, params=[source_id]
+            "SELECT * FROM sources WHERE source_id = ? OR CAST(source_id AS TEXT) = ?", 
+            conn, params=[source_id, str(source_id)]
         )
         
         if source.empty:
@@ -180,21 +180,23 @@ def get_neowise_lightcurve(
         source_info = source.iloc[0]
         
         if raw:
-            # 生データを取得
+            # 生データを取得（source_idを文字列と整数の両方で検索）
+            actual_source_id = source.iloc[0]['source_id']
             data = pd.read_sql_query("""
                 SELECT mjd, band, mpro_corrected as mag, sigmpro as mag_err
                 FROM neowise_raw_observations
                 WHERE source_id = ?
                 ORDER BY mjd
-            """, conn, params=[source_id])
+            """, conn, params=[actual_source_id])
         else:
             # エポック集約データを取得
+            actual_source_id = source.iloc[0]['source_id']
             data = pd.read_sql_query("""
                 SELECT mjd_mean as mjd, band, mag_mean as mag, mag_se as mag_err
                 FROM neowise_epoch_summary
                 WHERE source_id = ?
                 ORDER BY mjd_mean
-            """, conn, params=[source_id])
+            """, conn, params=[actual_source_id])
         
         # フロントエンド互換形式に変換
         # W1とW2のデータを統合してobservations配列を作成
@@ -268,8 +270,8 @@ def get_asassn_lightcurve(
         # source_idが指定されている場合、その天体情報を取得
         if source_id:
             source = pd.read_sql_query(
-                "SELECT * FROM sources WHERE source_id = ?", 
-                conn, params=[source_id]
+                "SELECT * FROM sources WHERE source_id = ? OR CAST(source_id AS TEXT) = ?", 
+                conn, params=[source_id, str(source_id)]
             )
             
             if not source.empty:
