@@ -957,9 +957,12 @@ class SkyViewer {
 
         const { target, guide, midRA, midDec } = this.mimizukuParams;
         const sep = this.calculateSeparation(target.ra, target.dec, guide.ra, guide.dec);
+        // Cap FoV at 0.3 degrees (18 arcmin) to keep field boxes visible even for distant objects
+        // This ensures both 1'×2' fields remain reasonably sized on screen
+        const fov = Math.max(0.15, Math.min(sep * 1.5, 0.3));
         this.mimizukuAladin = A.aladin('#mimizuku-field', {
             survey: document.getElementById('survey-select')?.value || 'P/2MASS/color',
-            fov: Math.max(0.15, sep * 1.5),
+            fov: fov,
             target: `${midRA} ${midDec}`,
             showReticle: true,
             showZoomControl: false,
