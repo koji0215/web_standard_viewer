@@ -32,6 +32,11 @@ class SkyViewer {
         this.mimizukuAladin = null;
         this.mimizukuPNGMode = false;
         this.mimizukuParams = null;
+        
+        // Solution 1 constants
+        this.HIGH_RESOLUTION_SCALE = 5;  // html2canvas scale for high resolution
+        this.FIXED_OUTPUT_WIDTH = 300;   // Fixed output width per field (pixels)
+        this.FIXED_OUTPUT_HEIGHT = 600;  // Fixed output height per field (pixels)
 
         // Fallback click handler ref
         this.__aladinHitTestHandler__ = null;
@@ -798,7 +803,7 @@ class SkyViewer {
             await new Promise(r => setTimeout(r, 2000)); // Wait for images to render
             const div = document.getElementById('mimizuku-field');
             // 案1: scale値を3から5に増加して高解像度化
-            const canvas = await html2canvas(div, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: 5 });
+            const canvas = await html2canvas(div, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: this.HIGH_RESOLUTION_SCALE });
             const png = await this.extractAndConcatenateFields(canvas);
 
             this.mimizukuAladin = null; // Release Aladin instance
@@ -853,13 +858,9 @@ class SkyViewer {
         const leftCanvas = this.extractOneFieldAsCanvas(sourceCanvas, this.mimizukuAladin, leftObj, wDeg, hDeg, geom, scale, angleRad, target, guide);
         const rightCanvas = this.extractOneFieldAsCanvas(sourceCanvas, this.mimizukuAladin, rightObj, wDeg, hDeg, geom, scale, angleRad, target, guide);
 
-        // 案1: 固定の出力サイズを定義（各フィールド300×600px）
-        const FIXED_WIDTH = 300;  // 1分角に相当
-        const FIXED_HEIGHT = 600; // 2分角に相当
-        
-        // 切り出した画像を固定サイズにスケールアップ
-        const scaledLeft = this.scaleCanvas(leftCanvas, FIXED_WIDTH, FIXED_HEIGHT);
-        const scaledRight = this.scaleCanvas(rightCanvas, FIXED_WIDTH, FIXED_HEIGHT);
+        // 案1: 固定の出力サイズにスケールアップ
+        const scaledLeft = this.scaleCanvas(leftCanvas, this.FIXED_OUTPUT_WIDTH, this.FIXED_OUTPUT_HEIGHT);
+        const scaledRight = this.scaleCanvas(rightCanvas, this.FIXED_OUTPUT_WIDTH, this.FIXED_OUTPUT_HEIGHT);
 
         // 1. スケール後の画像を結合する
         const combo = document.createElement('canvas');

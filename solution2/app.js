@@ -30,8 +30,14 @@ class SkyViewer {
 
         // MIMIZUKU dual-field / PNG
         this.mimizukuAladin = null;
+        this.mimizukuAladins = null; // Multiple Aladin instances for separated mode
         this.mimizukuPNGMode = false;
         this.mimizukuParams = null;
+        
+        // Solution 2 constants
+        this.SEPARATION_THRESHOLD_DEGREES = 10 / 60;  // 10 arcmin threshold for separated mode
+        this.SEPARATED_VIEW_FOV_DEGREES = 0.05;       // 3 arcmin FoV for separated views
+        this.HIGH_RESOLUTION_SCALE = 4;               // html2canvas scale for high resolution
 
         // Fallback click handler ref
         this.__aladinHitTestHandler__ = null;
@@ -809,7 +815,7 @@ class SkyViewer {
                 png = await this.convertToPNGViewSeparated();
             } else {
                 const div = document.getElementById('mimizuku-field');
-                const canvas = await html2canvas(div, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: 4 });
+                const canvas = await html2canvas(div, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: this.HIGH_RESOLUTION_SCALE });
                 png = await this.extractAndConcatenateFields(canvas);
             }
 
@@ -853,8 +859,8 @@ class SkyViewer {
         
         // 両方を並行してキャプチャ
         const [targetCanvas, guideCanvas] = await Promise.all([
-            html2canvas(targetDiv, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: 4 }),
-            html2canvas(guideDiv, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: 4 })
+            html2canvas(targetDiv, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: this.HIGH_RESOLUTION_SCALE }),
+            html2canvas(guideDiv, { useCORS: true, allowTaint: true, backgroundColor: '#000', scale: this.HIGH_RESOLUTION_SCALE })
         ]);
         
         // 各キャンバスから1'×2'のフィールドを切り出し
@@ -1036,10 +1042,8 @@ class SkyViewer {
             separation: sep
         };
         
-        // 案2: 距離閾値（10分角 = 1/6度 ≈ 0.167度）
-        const SEPARATION_THRESHOLD = 10 / 60;  // 10 arcmin
-        
-        if (sep > SEPARATION_THRESHOLD) {
+        // 案2: 距離閾値で自動モード切り替え
+        if (sep > this.SEPARATION_THRESHOLD_DEGREES) {
             // 分離モード: 2つの独立したAladinビューを使用
             this.mimizukuParams.separatedMode = true;
             setTimeout(() => this.initMimizukuSeparatedFields(), 100);
@@ -1094,13 +1098,10 @@ class SkyViewer {
         const { target, guide } = this.mimizukuParams;
         
         // 各天体中心のAladinビューを作成（固定の狭いFoV）
-        const fovForField = 0.05;  // 3分角（1'×2'のフィールドに十分な余裕）
-        
-        // Target用のAladinインスタンス
         this.mimizukuAladins = {
             target: A.aladin('#mimizuku-field-target', {
                 survey: document.getElementById('survey-select')?.value || 'P/2MASS/color',
-                fov: fovForField,
+                fov: this.SEPARATED_VIEW_FOV_DEGREES,
                 target: `${target.ra} ${target.dec}`,
                 showReticle: false,
                 showZoomControl: false,
@@ -1113,7 +1114,7 @@ class SkyViewer {
             }),
             guide: A.aladin('#mimizuku-field-guide', {
                 survey: document.getElementById('survey-select')?.value || 'P/2MASS/color',
-                fov: fovForField,
+                fov: this.SEPARATED_VIEW_FOV_DEGREES,
                 target: `${guide.ra} ${guide.dec}`,
                 showReticle: false,
                 showZoomControl: false,
