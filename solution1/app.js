@@ -957,9 +957,28 @@ class SkyViewer {
 
         const { target, guide, midRA, midDec } = this.mimizukuParams;
         const sep = this.calculateSeparation(target.ra, target.dec, guide.ra, guide.dec);
-        // Cap FoV at 0.3 degrees (18 arcmin) to keep field boxes visible even for distant objects
-        // This ensures both 1'×2' fields remain reasonably sized on screen
-        const fov = Math.max(0.15, Math.min(sep * 1.5, 0.3));
+        
+        // Calculate angular separations in RA and Dec directions
+        const dRA = Math.abs(guide.ra - target.ra) * Math.cos(midDec * Math.PI / 180); // in degrees
+        const dDec = Math.abs(guide.dec - target.dec); // in degrees
+        
+        // Aladin display has an aspect ratio of approximately 1:2.57 (height:width)
+        // FoV is applied to the horizontal (width) dimension
+        // So vertical FoV = horizontal FoV / 2.57
+        const aspectRatio = 2.57;
+        
+        // Calculate required FoV based on both dimensions
+        // For horizontal: need dRA * 1.5 to have margin
+        // For vertical: need dDec * 1.5, but this translates to (dDec * 1.5 * aspectRatio) in horizontal FoV
+        const fovForRA = dRA * 1.5;
+        const fovForDec = dDec * 1.5 * aspectRatio;
+        
+        // Take the larger of the two to ensure both objects are visible
+        const calculatedFov = Math.max(fovForRA, fovForDec);
+        
+        // Apply minimum of 0.15 degrees (9 arcmin) and maximum of 0.3 degrees (18 arcmin)
+        const fov = Math.max(0.15, Math.min(calculatedFov, 0.3));
+        
         this.mimizukuAladin = A.aladin('#mimizuku-field', {
             survey: document.getElementById('survey-select')?.value || 'P/2MASS/color',
             fov: fov,
