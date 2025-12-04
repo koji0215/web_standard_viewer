@@ -976,8 +976,8 @@ class SkyViewer {
         // Take the larger of the two to ensure both objects are visible
         const calculatedFov = Math.max(fovForRA, fovForDec);
         
-        // Apply minimum of 0.15 degrees (9 arcmin) and maximum of 0.3 degrees (18 arcmin)
-        const fov = Math.max(0.15, Math.min(calculatedFov, 0.3));
+        // Apply minimum of 0.15 degrees (9 arcmin) and maximum of 1.1 degrees 
+        const fov = Math.max(0.15, Math.min(calculatedFov, 1.1));
         
         this.mimizukuAladin = A.aladin('#mimizuku-field', {
             survey: document.getElementById('survey-select')?.value || 'P/2MASS/color',
