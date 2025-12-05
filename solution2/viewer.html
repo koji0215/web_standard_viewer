@@ -997,7 +997,7 @@
                     
                     if (!response.ok) {
                         const error = await response.json();
-                        throw new Error(error.detail || 'Failed to obtain data データの取得に失敗しました');
+                        throw new Error(error.detail || 'Failed to obtain data');
                     }
 
                     const data = await response.json();
@@ -1034,7 +1034,7 @@
                 document.getElementById('lc-ra').textContent = data.ra?.toFixed(6) || '-';
                 document.getElementById('lc-dec').textContent = data.dec?.toFixed(6) || '-';
                 
-                const modeLabel = this.currentDataMode === 'raw' ? '(生データ)' : '(エポック)';
+                const modeLabel = this.currentDataMode === 'raw' ? '(raw data)' : '(epoch-averaged)';
                 document.getElementById('lc-obs-count').textContent = `${data.num_observations} ${modeLabel}`;
 
                 // Draw NEOWISE chart
