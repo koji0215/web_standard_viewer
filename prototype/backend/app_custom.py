@@ -216,7 +216,7 @@ def get_neowise_lightcurve(
                 mask = pd.Series([True] * len(band_data), index=band_data.index)
                 
                 if apply_cc_flags:
-                    mask &= band_data['cc_flags'].str[band_idx] == '0'
+                    mask &= (band_data['cc_flags'].str.len() > band_idx) & (band_data['cc_flags'].str[band_idx] == '0')
                 if apply_sso_flg:
                     mask &= band_data['sso_flg'] == 0
                 if apply_qi_fact:
@@ -224,9 +224,9 @@ def get_neowise_lightcurve(
                 if apply_saa_sep:
                     mask &= band_data['saa_sep'] >= 5.0
                 if apply_ph_qual:
-                    mask &= band_data['ph_qual'].str[band_idx] == 'A'
+                    mask &= (band_data['ph_qual'].str.len() > band_idx) & (band_data['ph_qual'].str[band_idx] == 'A')
                 if apply_moon_masked:
-                    mask &= band_data['moon_masked'].str[band_idx] == '0'
+                    mask &= (band_data['moon_masked'].str.len() > band_idx) & (band_data['moon_masked'].str[band_idx] == '0')
                 if apply_sat:
                     mask &= band_data['sat'] <= 0.05
                 if apply_rchi2:
@@ -484,7 +484,7 @@ def get_neowise_filtered_data(
         mask = pd.Series([True] * len(data), index=data.index)
         
         if apply_cc_flags:
-            mask &= data['cc_flags'].str[band_idx] == '0'
+            mask &= (data['cc_flags'].str.len() > band_idx) & (data['cc_flags'].str[band_idx] == '0')
         
         if apply_sso_flg:
             mask &= data['sso_flg'] == 0
@@ -496,10 +496,10 @@ def get_neowise_filtered_data(
             mask &= data['saa_sep'] >= 5.0
         
         if apply_ph_qual:
-            mask &= data['ph_qual'].str[band_idx] == 'A'
+            mask &= (data['ph_qual'].str.len() > band_idx) & (data['ph_qual'].str[band_idx] == 'A')
         
         if apply_moon_masked:
-            mask &= data['moon_masked'].str[band_idx] == '0'
+            mask &= (data['moon_masked'].str.len() > band_idx) & (data['moon_masked'].str[band_idx] == '0')
         
         if apply_sat:
             mask &= data['sat'] <= 0.05
