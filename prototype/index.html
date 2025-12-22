@@ -256,6 +256,72 @@
             </div>
         </div>
 
+        <!-- Filter Controls Panel (only visible in raw mode) -->
+        <div id="filterPanel" class="controls" style="display: none;">
+            <h3 style="color: #4CAF50; margin-bottom: 15px;">フィルター設定</h3>
+            
+            <div class="control-row" style="flex-wrap: wrap;">
+                <label style="width: 100%; margin-bottom: 10px;">データ品質フラグ:</label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_cc_flags" checked> cc_flags='0'
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_ph_qual" checked> ph_qual='A'
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_moon_masked" checked> moon_masked='0'
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_sso_flg" checked> sso_flg=0
+                </label>
+            </div>
+            
+            <div class="control-row" style="flex-wrap: wrap;">
+                <label style="width: 100%; margin-bottom: 10px;">観測条件フラグ:</label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_qi_fact" checked> qi_fact=1.0
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_saa_sep" checked> saa_sep≥5.0
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_qual_frame" checked> qual_frame>0.0
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_sky" checked> sky not null
+                </label>
+            </div>
+            
+            <div class="control-row" style="flex-wrap: wrap;">
+                <label style="width: 100%; margin-bottom: 10px;">測光品質フラグ:</label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_sat" checked> sat≤0.05
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_rchi2" checked> rchi2≤50
+                </label>
+            </div>
+            
+            <div class="control-row" style="flex-wrap: wrap;">
+                <label style="width: 100%; margin-bottom: 10px;">データ処理オプション:</label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_zp_correction" checked> ゼロポイント補正を適用
+                </label>
+                <label style="min-width: auto; width: auto; margin-right: 15px;">
+                    <input type="checkbox" id="filter_sigma_clipping" checked> 3σクリッピングを適用
+                </label>
+            </div>
+            
+            <div class="control-row">
+                <button onclick="applyFilters()" style="background-color: #2196F3;">フィルター適用</button>
+                <button onclick="resetFilters()" style="background-color: #666;">デフォルトに戻す</button>
+            </div>
+            
+            <div class="control-row">
+                <div id="filterStats" style="color: #888; font-size: 13px;"></div>
+            </div>
+        </div>
+
         <div id="errorMessage" class="error" style="display: none;"></div>
 
         <div id="loadingMessage" class="loading" style="display: none;">
@@ -322,6 +388,7 @@
         let asassnChart = null;
         let currentDataMode = 'epoch'; // 'epoch' or 'raw'
         let currentSourceId = null;
+        let currentSourceData = null; // Store current source info for re-filtering
 
         // ページ読み込み時にサンプルリストを取得
         window.addEventListener('DOMContentLoaded', loadSampleList);
@@ -333,17 +400,65 @@
             document.getElementById('btnEpochData').classList.toggle('active', mode === 'epoch');
             document.getElementById('btnRawData').classList.toggle('active', mode === 'raw');
             
+            // フィルターパネルの表示切り替え
+            const filterPanel = document.getElementById('filterPanel');
+            filterPanel.style.display = mode === 'raw' ? 'block' : 'none';
+            
             // 表示情報を更新
             const info = document.getElementById('dataModeInfo');
             if (mode === 'epoch') {
                 info.textContent = 'エポック集約データを表示中';
             } else {
-                info.textContent = '生データを表示中（フィルタリング前）';
+                info.textContent = '生データを表示中（フィルタリング可能）';
             }
             
             // すでにデータが表示されている場合は再読み込み
             if (currentSourceId) {
                 loadLightcurves();
+            }
+        }
+
+        function getFilterParams() {
+            // Get all filter parameters from checkboxes
+            return {
+                apply_cc_flags: document.getElementById('filter_cc_flags').checked,
+                apply_ph_qual: document.getElementById('filter_ph_qual').checked,
+                apply_moon_masked: document.getElementById('filter_moon_masked').checked,
+                apply_sso_flg: document.getElementById('filter_sso_flg').checked,
+                apply_qi_fact: document.getElementById('filter_qi_fact').checked,
+                apply_saa_sep: document.getElementById('filter_saa_sep').checked,
+                apply_qual_frame: document.getElementById('filter_qual_frame').checked,
+                apply_sky: document.getElementById('filter_sky').checked,
+                apply_sat: document.getElementById('filter_sat').checked,
+                apply_rchi2: document.getElementById('filter_rchi2').checked,
+                apply_zp_correction: document.getElementById('filter_zp_correction').checked,
+                apply_sigma_clipping: document.getElementById('filter_sigma_clipping').checked
+            };
+        }
+
+        function resetFilters() {
+            // Reset all checkboxes to default (all checked)
+            const filterIds = [
+                'filter_cc_flags', 'filter_ph_qual', 'filter_moon_masked', 'filter_sso_flg',
+                'filter_qi_fact', 'filter_saa_sep', 'filter_qual_frame', 'filter_sky',
+                'filter_sat', 'filter_rchi2', 'filter_zp_correction', 'filter_sigma_clipping'
+            ];
+            filterIds.forEach(id => {
+                document.getElementById(id).checked = true;
+            });
+            
+            // Reapply filters
+            if (currentSourceId) {
+                loadLightcurves();
+            }
+        }
+
+        function applyFilters() {
+            // Reapply filters with current settings
+            if (currentSourceId) {
+                loadLightcurves();
+            } else {
+                showError('先にデータを読み込んでください');
             }
         }
 
@@ -444,6 +559,12 @@
             let url = `${API_BASE_URL}/api/lightcurve/${survey}?source_id=${encodeURIComponent(sourceId)}`;
             if (raw && survey === 'neowise') {
                 url += '&raw=true';
+                
+                // Add filter parameters
+                const filters = getFilterParams();
+                for (const [key, value] of Object.entries(filters)) {
+                    url += `&${key}=${value}`;
+                }
             }
             
             const response = await fetch(url);
@@ -470,6 +591,9 @@
         }
 
         function displayLightcurves(neowiseData, asassnData) {
+            // Store current data
+            currentSourceData = { neowiseData, asassnData };
+            
             // 情報パネルを更新
             document.getElementById('infoSourceId').textContent = neowiseData.source_id;
             document.getElementById('infoAllwiseId').textContent = neowiseData.allwise_id || '-';
@@ -482,6 +606,11 @@
             document.getElementById('infoNeowiseObs').textContent = obsLabel;
             document.getElementById('infoAsassnObs').textContent = asassnData.num_observations;
 
+            // Display filter stats if in raw mode
+            if (currentDataMode === 'raw') {
+                updateFilterStats(neowiseData);
+            }
+
             document.getElementById('infoPanel').style.display = 'block';
             document.getElementById('chartsContainer').style.display = 'grid';
 
@@ -490,6 +619,23 @@
 
             // ASASSNチャートを描画
             plotASASSN(asassnData);
+        }
+
+        function updateFilterStats(neowiseData) {
+            // Show filter statistics
+            const statsDiv = document.getElementById('filterStats');
+            
+            // Count W1 and W2 observations
+            let w1Count = 0, w2Count = 0;
+            neowiseData.observations.forEach(obs => {
+                if (obs.w1_mag !== null && obs.w1_mag !== undefined) w1Count++;
+                if (obs.w2_mag !== null && obs.w2_mag !== undefined) w2Count++;
+            });
+            
+            statsDiv.innerHTML = `
+                <strong>フィルター後のデータ数:</strong> 
+                W1: ${w1Count}点, W2: ${w2Count}点
+            `;
         }
 
         function plotNEOWISE(data) {

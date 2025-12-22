@@ -5,11 +5,12 @@
 フロントエンド（index.html）と互換性のあるAPI形式
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 import sqlite3
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
 app = FastAPI(
@@ -125,7 +126,20 @@ def get_neowise_lightcurve(
     source_id: Optional[str] = None,
     ra: Optional[float] = None,
     dec: Optional[float] = None,
-    raw: bool = False
+    raw: bool = False,
+    # Filter parameters for raw mode
+    apply_cc_flags: bool = Query(True, description="cc_flags='0' フィルタを適用"),
+    apply_sso_flg: bool = Query(True, description="sso_flg=0 フィルタを適用"),
+    apply_qi_fact: bool = Query(True, description="qi_fact=1.0 フィルタを適用"),
+    apply_saa_sep: bool = Query(True, description="saa_sep>=5.0 フィルタを適用"),
+    apply_ph_qual: bool = Query(True, description="ph_qual='A' フィルタを適用"),
+    apply_moon_masked: bool = Query(True, description="moon_masked='0' フィルタを適用"),
+    apply_sat: bool = Query(True, description="sat<=0.05 フィルタを適用"),
+    apply_rchi2: bool = Query(True, description="rchi2<=50 フィルタを適用"),
+    apply_qual_frame: bool = Query(True, description="qual_frame>0.0 フィルタを適用"),
+    apply_sky: bool = Query(True, description="sky not null フィルタを適用"),
+    apply_zp_correction: bool = Query(True, description="ゼロポイント補正を適用"),
+    apply_sigma_clipping: bool = Query(True, description="3σクリッピングを適用")
 ):
     """
     NEOWISEライトカーブを取得
@@ -182,12 +196,74 @@ def get_neowise_lightcurve(
         if raw:
             # 生データを取得（source_idを文字列と整数の両方で検索）
             actual_source_id = source.iloc[0]['source_id']
-            data = pd.read_sql_query("""
-                SELECT mjd, band, mpro_corrected as mag, sigmpro as mag_err
+            raw_data = pd.read_sql_query("""
+                SELECT mjd, band, mpro, sigmpro, mpro_corrected,
+                       cc_flags, ph_qual, moon_masked, sso_flg,
+                       qi_fact, saa_sep, sat, rchi2, qual_frame, sky
                 FROM neowise_raw_observations
                 WHERE source_id = ?
                 ORDER BY mjd
             """, conn, params=[actual_source_id])
+            
+            # Apply filters for each band
+            data_list = []
+            for band in ['W1', 'W2']:
+                band_data = raw_data[raw_data['band'] == band].copy()
+                if band_data.empty:
+                    continue
+                
+                band_idx = 0 if band == 'W1' else 1
+                mask = pd.Series([True] * len(band_data), index=band_data.index)
+                
+                if apply_cc_flags:
+                    mask &= (band_data['cc_flags'].str.len() > band_idx) & (band_data['cc_flags'].str[band_idx] == '0')
+                if apply_sso_flg:
+                    mask &= band_data['sso_flg'] == 0
+                if apply_qi_fact:
+                    mask &= band_data['qi_fact'] == 1.0
+                if apply_saa_sep:
+                    mask &= band_data['saa_sep'] >= 5.0
+                if apply_ph_qual:
+                    mask &= (band_data['ph_qual'].str.len() > band_idx) & (band_data['ph_qual'].str[band_idx] == 'A')
+                if apply_moon_masked:
+                    mask &= (band_data['moon_masked'].str.len() > band_idx) & (band_data['moon_masked'].str[band_idx] == '0')
+                if apply_sat:
+                    mask &= band_data['sat'] <= 0.05
+                if apply_rchi2:
+                    mask &= band_data['rchi2'] <= 50
+                if apply_qual_frame:
+                    mask &= band_data['qual_frame'] > 0.0
+                if apply_sky:
+                    mask &= band_data['sky'].notna()
+                
+                filtered_band = band_data[mask].copy()
+                
+                if filtered_band.empty:
+                    continue
+                
+                # Apply zero-point correction
+                if apply_zp_correction:
+                    filtered_band['mag'] = filtered_band['mpro_corrected']
+                else:
+                    filtered_band['mag'] = filtered_band['mpro']
+                
+                filtered_band['mag_err'] = filtered_band['sigmpro']
+                
+                # Apply 3-sigma clipping
+                if apply_sigma_clipping:
+                    mean_mag = filtered_band['mag'].mean()
+                    std_mag = filtered_band['mag'].std()
+                    
+                    if std_mag > 0 and not np.isnan(std_mag):
+                        sigma_mask = (
+                            (filtered_band['mag'] >= (mean_mag - 3 * std_mag)) &
+                            (filtered_band['mag'] <= (mean_mag + 3 * std_mag))
+                        )
+                        filtered_band = filtered_band[sigma_mask].copy()
+                
+                data_list.append(filtered_band[['mjd', 'band', 'mag', 'mag_err']])
+            
+            data = pd.concat(data_list, ignore_index=True) if data_list else pd.DataFrame()
         else:
             # エポック集約データを取得
             actual_source_id = source.iloc[0]['source_id']
@@ -325,7 +401,7 @@ def get_neowise_raw_data(source_id: str):
         data = pd.read_sql_query("""
             SELECT mjd, band, mpro, sigmpro, mpro_corrected,
                    cc_flags, ph_qual, moon_masked, sso_flg,
-                   qi_fact, saa_sep, sat, rchi2, qual_frame
+                   qi_fact, saa_sep, sat, rchi2, qual_frame, sky
             FROM neowise_raw_observations
             WHERE source_id = ?
             ORDER BY mjd
@@ -341,6 +417,155 @@ def get_neowise_raw_data(source_id: str):
             "source_id": source_id,
             "count": len(data),
             "data": data.to_dict(orient='records')
+        }
+        
+    finally:
+        conn.close()
+
+
+@app.get("/api/neowise/filtered/{source_id}")
+def get_neowise_filtered_data(
+    source_id: str,
+    band: str = Query("W1", description="バンド (W1 or W2)"),
+    apply_cc_flags: bool = Query(True, description="cc_flags='0' フィルタを適用"),
+    apply_sso_flg: bool = Query(True, description="sso_flg=0 フィルタを適用"),
+    apply_qi_fact: bool = Query(True, description="qi_fact=1.0 フィルタを適用"),
+    apply_saa_sep: bool = Query(True, description="saa_sep>=5.0 フィルタを適用"),
+    apply_ph_qual: bool = Query(True, description="ph_qual='A' フィルタを適用"),
+    apply_moon_masked: bool = Query(True, description="moon_masked='0' フィルタを適用"),
+    apply_sat: bool = Query(True, description="sat<=0.05 フィルタを適用"),
+    apply_rchi2: bool = Query(True, description="rchi2<=50 フィルタを適用"),
+    apply_qual_frame: bool = Query(True, description="qual_frame>0.0 フィルタを適用"),
+    apply_sky: bool = Query(True, description="sky not null フィルタを適用"),
+    apply_zp_correction: bool = Query(True, description="ゼロポイント補正を適用"),
+    apply_sigma_clipping: bool = Query(True, description="3σクリッピングを適用")
+):
+    """
+    NEOWISEフィルタ済みデータを取得
+    
+    Parameters:
+    - source_id: 天体識別子
+    - band: バンド (W1 or W2)
+    - apply_*: 各フィルタの適用有無
+    - apply_zp_correction: ゼロポイント補正の適用有無
+    - apply_sigma_clipping: 3σクリッピングの適用有無
+    
+    Returns:
+    - フィルタ適用後のデータ（MJD, 等級, 誤差）
+    """
+    if band not in ['W1', 'W2']:
+        raise HTTPException(status_code=400, detail="バンドはW1またはW2を指定してください")
+    
+    conn = get_db_connection()
+    
+    try:
+        # 生データを取得
+        data = pd.read_sql_query("""
+            SELECT mjd, band, mpro, sigmpro, mpro_corrected,
+                   cc_flags, ph_qual, moon_masked, sso_flg,
+                   qi_fact, saa_sep, sat, rchi2, qual_frame, sky
+            FROM neowise_raw_observations
+            WHERE source_id = ? AND band = ?
+            ORDER BY mjd
+        """, conn, params=[source_id, band])
+        
+        if data.empty:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"生データが見つかりません: {source_id}, {band}"
+            )
+        
+        original_count = len(data)
+        
+        # バンドインデックス（cc_flags, ph_qual, moon_maskedは2文字）
+        band_idx = 0 if band == 'W1' else 1
+        
+        # フィルタリング
+        mask = pd.Series([True] * len(data), index=data.index)
+        
+        if apply_cc_flags:
+            mask &= (data['cc_flags'].str.len() > band_idx) & (data['cc_flags'].str[band_idx] == '0')
+        
+        if apply_sso_flg:
+            mask &= data['sso_flg'] == 0
+        
+        if apply_qi_fact:
+            mask &= data['qi_fact'] == 1.0
+        
+        if apply_saa_sep:
+            mask &= data['saa_sep'] >= 5.0
+        
+        if apply_ph_qual:
+            mask &= (data['ph_qual'].str.len() > band_idx) & (data['ph_qual'].str[band_idx] == 'A')
+        
+        if apply_moon_masked:
+            mask &= (data['moon_masked'].str.len() > band_idx) & (data['moon_masked'].str[band_idx] == '0')
+        
+        if apply_sat:
+            mask &= data['sat'] <= 0.05
+        
+        if apply_rchi2:
+            mask &= data['rchi2'] <= 50
+        
+        if apply_qual_frame:
+            mask &= data['qual_frame'] > 0.0
+        
+        if apply_sky:
+            mask &= data['sky'].notna()
+        
+        filtered_data = data[mask].copy()
+        
+        if filtered_data.empty:
+            return {
+                "source_id": source_id,
+                "band": band,
+                "original_count": original_count,
+                "filtered_count": 0,
+                "data": []
+            }
+        
+        # ゼロポイント補正の選択
+        if apply_zp_correction:
+            filtered_data['mag'] = filtered_data['mpro_corrected']
+        else:
+            filtered_data['mag'] = filtered_data['mpro']
+        
+        filtered_data['mag_err'] = filtered_data['sigmpro']
+        
+        # 3σクリッピング
+        if apply_sigma_clipping:
+            mean_mag = filtered_data['mag'].mean()
+            std_mag = filtered_data['mag'].std()
+            
+            if std_mag > 0 and not np.isnan(std_mag):
+                sigma_mask = (
+                    (filtered_data['mag'] >= (mean_mag - 3 * std_mag)) &
+                    (filtered_data['mag'] <= (mean_mag + 3 * std_mag))
+                )
+                filtered_data = filtered_data[sigma_mask].copy()
+        
+        result = filtered_data[['mjd', 'mag', 'mag_err']].to_dict(orient='records')
+        
+        return {
+            "source_id": source_id,
+            "band": band,
+            "original_count": original_count,
+            "filtered_count": len(filtered_data),
+            "filters_applied": {
+                "cc_flags": apply_cc_flags,
+                "sso_flg": apply_sso_flg,
+                "qi_fact": apply_qi_fact,
+                "saa_sep": apply_saa_sep,
+                "ph_qual": apply_ph_qual,
+                "moon_masked": apply_moon_masked,
+                "sat": apply_sat,
+                "rchi2": apply_rchi2,
+                "qual_frame": apply_qual_frame,
+                "sky": apply_sky,
+                "zp_correction": apply_zp_correction,
+                "sigma_clipping": apply_sigma_clipping
+            },
+            "data": result
         }
         
     finally:
