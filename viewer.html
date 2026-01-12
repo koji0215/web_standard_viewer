@@ -625,8 +625,13 @@
                             <input type="date" id="obs-date-viewer" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
                         </div>
                         <div style="margin-bottom: 8px;">
+                            <label for="obs-time-viewer" style="font-size: 12px; color: #aaa;">Time (UTC):</label>
+                            <input type="time" id="obs-time-viewer" value="12:00" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                        </div>
+                        <div style="margin-bottom: 8px;">
                             <label for="obs-location-viewer" style="font-size: 12px; color: #aaa;">Location:</label>
                             <select id="obs-location-viewer" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                                <option value="tao" selected>TAO (Chile, 5640m)</option>
                                 <option value="subaru">Subaru (Mauna Kea)</option>
                                 <option value="keck">Keck Observatory</option>
                                 <option value="magellan">Magellan (Las Campanas)</option>
@@ -827,6 +832,7 @@
                 checkObsButton.addEventListener('click', () => {
                     if (window.skyViewer) {
                         const dateString = document.getElementById('obs-date-viewer')?.value;
+                        const timeString = document.getElementById('obs-time-viewer')?.value || '12:00';
                         const locationKey = document.getElementById('obs-location-viewer')?.value;
                         const resultsDiv = document.getElementById('observability-results-viewer');
                         
@@ -844,7 +850,7 @@
                         
                         try {
                             const loc = window.skyViewer.getObservatoryLocation(locationKey);
-                            const obsDate = new Date(dateString + 'T12:00:00');
+                            const obsDate = new Date(dateString + 'T' + timeString + ':00');
                             const sunTimes = window.skyViewer.findSunriseSunset(obsDate, loc);
                             const tInfo = window.skyViewer.checkTargetObservability(
                                 window.skyViewer.targetCoord.ra,
@@ -870,13 +876,25 @@
                                         evening_astronomical: sunTimes.evening_twilight?.toISOString() || null,
                                         morning_astronomical: sunTimes.morning_twilight?.toISOString() || null
                                     },
-                                    target_info: { ...tInfo }
+                                    target_info: {
+                                        observable: tInfo.observable,
+                                        best_time: tInfo.best_time?.toISOString() || null,
+                                        best_altitude: tInfo.best_altitude,
+                                        rise_time: tInfo.rise_time?.toISOString() || null,
+                                        set_time: tInfo.set_time?.toISOString() || null
+                                    }
                                 },
                                 {
                                     location: loc,
                                     sun: sunTimes,
                                     twilight: sunTimes.twilight,
-                                    target_info: { ...gInfo }
+                                    target_info: {
+                                        observable: gInfo.observable,
+                                        best_time: gInfo.best_time?.toISOString() || null,
+                                        best_altitude: gInfo.best_altitude,
+                                        rise_time: gInfo.rise_time?.toISOString() || null,
+                                        set_time: gInfo.set_time?.toISOString() || null
+                                    }
                                 },
                                 'observability-results-viewer'
                             );
