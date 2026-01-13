@@ -926,20 +926,26 @@ class SkyViewer {
             fovWidthArcmin: 1,
             fovHeightArcmin: 2
         };
-        setTimeout(() => this.initMimizukuSingleField(), 100);
+        setTimeout(() => this.initMimizukuDualFields(), 100);
     }
 
-    initMimizukuSingleField() {
-        const div = document.getElementById('mimizuku-field');
-        if (!div) return;
-        div.innerHTML = '';
+    initMimizukuDualFields() {
+        // Solution2: Side-by-side view with two separate Aladin instances
+        const targetDiv = document.getElementById('mimizuku-field-target');
+        const guideDiv = document.getElementById('mimizuku-field-guide');
+        if (!targetDiv || !guideDiv) return;
+        
+        targetDiv.innerHTML = '';
+        guideDiv.innerHTML = '';
 
-        const { target, guide, midRA, midDec } = this.mimizukuParams;
-        const sep = this.calculateSeparation(target.ra, target.dec, guide.ra, guide.dec);
-        this.mimizukuAladin = A.aladin('#mimizuku-field', {
-            survey: document.getElementById('survey-select')?.value || 'P/2MASS/color',
-            fov: Math.max(0.15, sep * 1.5),
-            target: `${midRA} ${midDec}`,
+        const { target, guide, angleRad } = this.mimizukuParams;
+        const survey = document.getElementById('survey-select')?.value || 'P/2MASS/color';
+        
+        // Create separate Aladin instances for target and guide
+        this.mimizukuAladinTarget = A.aladin('#mimizuku-field-target', {
+            survey: survey,
+            fov: 0.05,  // 1'×2' field, use fixed FOV
+            target: `${target.ra} ${target.dec}`,
             showReticle: true,
             showZoomControl: false,
             showFullscreenControl: false,
@@ -949,10 +955,61 @@ class SkyViewer {
             showCooGrid: false,
             allowFullZoomout: false
         });
-        setTimeout(() => this.drawMimizukuFields(this.mimizukuAladin, target, guide, this.mimizukuParams.angleRad, 1, 2), 500);
+        
+        this.mimizukuAladinGuide = A.aladin('#mimizuku-field-guide', {
+            survey: survey,
+            fov: 0.05,  // 1'×2' field, use fixed FOV
+            target: `${guide.ra} ${guide.dec}`,
+            showReticle: true,
+            showZoomControl: false,
+            showFullscreenControl: false,
+            showLayersControl: false,
+            showGotoControl: false,
+            showShareControl: false,
+            showCooGrid: false,
+            allowFullZoomout: false
+        });
+        
+        setTimeout(() => {
+            this.drawMimizukuField(this.mimizukuAladinTarget, target, angleRad, 1, 2, '#ff0', 'Target');
+            this.drawMimizukuField(this.mimizukuAladinGuide, guide, angleRad, 1, 2, '#0ff', 'Guide');
+        }, 500);
+    }
+
+    drawMimizukuField(aladin, obj, angleRad, wArcmin, hArcmin, color, label) {
+        // Draw a single field rectangle on the given Aladin instance
+        const halfW = (wArcmin / 60) / 2, halfH = (hArcmin / 60) / 2;
+        const ov = A.graphicOverlay({ color: color, lineWidth: 2 });
+        aladin.addOverlay(ov);
+        const cat = A.catalog({ name: 'Labels', sourceSize: 18 });
+        aladin.addCatalog(cat);
+
+        const cosDec = Math.cos(obj.dec * Math.PI / 180);
+        const corners = [
+            [-halfW, -halfH], [halfW, -halfH], [halfW, halfH], [-halfW, halfH], [-halfW, -halfH]
+        ].map(([dx, dy]) => {
+            const rx = dx * Math.cos(angleRad) - dy * Math.sin(angleRad);
+            const ry = dx * Math.sin(angleRad) + dy * Math.cos(angleRad);
+            return [obj.ra + rx / cosDec, obj.dec + ry];
+        });
+        
+        const fill = color === '#ff0' ? 'rgba(255,255,0,0.05)' : 'rgba(0,255,255,0.05)';
+        ov.add(A.polygon(corners, { color, lineWidth: 3, fillColor: fill }));
+        cat.addSources([A.source(obj.ra, obj.dec, { 
+            name: label, 
+            shape: label === 'Target' ? 'square' : 'circle', 
+            color, 
+            size: 20 
+        })]);
+    }
+
+    initMimizukuSingleField() {
+        // Keep this method for backwards compatibility, but redirect to dual fields
+        this.initMimizukuDualFields();
     }
 
     drawMimizukuFields(aladin, target, guide, angleRad, wArcmin, hArcmin) {
+        // Deprecated in solution2 - using separate drawMimizukuField instead
         const halfW = (wArcmin / 60) / 2, halfH = (hArcmin / 60) / 2;
         const ov = A.graphicOverlay({ color: '#ff0', lineWidth: 2 });
         aladin.addOverlay(ov);
@@ -978,11 +1035,25 @@ class SkyViewer {
     closeMimizukuDualField() {
         document.getElementById('mimizuku-modal').style.display = 'none';
         this.mimizukuAladin = null;
+        this.mimizukuAladinTarget = null;
+        this.mimizukuAladinGuide = null;
         this.mimizukuPNGMode = false;
         const button = document.getElementById('png-mode-text');
         if (button) button.textContent = 'Switch to PNG View';
         const container = document.getElementById('mimizuku-view-container');
-        if (container) container.innerHTML = '<div id="mimizuku-field" style="flex:1;background:#000;border:2px solid #444;position:relative;"></div>';
+        if (container) {
+            // Restore side-by-side structure for solution2
+            container.innerHTML = `
+              <div style="flex: 1; display: flex; flex-direction: column; border: 2px solid #ff0; background: #000;">
+                <div style="background: #ff0; color: #000; text-align: center; padding: 5px; font-weight: bold;">Target Field</div>
+                <div id="mimizuku-field-target" style="flex: 1; position: relative;"></div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; border: 2px solid #0ff; background: #000;">
+                <div style="background: #0ff; color: #000; text-align: center; padding: 5px; font-weight: bold;">Guide Star Field</div>
+                <div id="mimizuku-field-guide" style="flex: 1; position: relative;"></div>
+              </div>
+            `;
+        }
     }
 
     // ---------- Navigation ----------

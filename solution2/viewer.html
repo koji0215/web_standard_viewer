@@ -717,10 +717,17 @@
                 </div>
             </div>
             <div id="mimizuku-view-container">
-                <div id="mimizuku-field"></div>
+                <div style="flex: 1; display: flex; flex-direction: column; border: 2px solid #ff0; background: #000;">
+                    <div style="background: #ff0; color: #000; text-align: center; padding: 5px; font-weight: bold;">Target Field</div>
+                    <div id="mimizuku-field-target" style="flex: 1; position: relative;"></div>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; border: 2px solid #0ff; background: #000;">
+                    <div style="background: #0ff; color: #000; text-align: center; padding: 5px; font-weight: bold;">Guide Star Field</div>
+                    <div id="mimizuku-field-guide" style="flex: 1; position: relative;"></div>
+                </div>
             </div>
             <div class="modal-description">
-                <p id="mimizuku-description">Showing both Target and Guide Star fields (1'×2' each)</p>
+                <p id="mimizuku-description">Showing Target and Guide Star fields (1'×2' each) side-by-side for detailed inspection</p>
             </div>
         </div>
     </div>
