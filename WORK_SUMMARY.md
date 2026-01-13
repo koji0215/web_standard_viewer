@@ -56,20 +56,46 @@
 
 ### 4. フォルダ構成の整理 / Folder Structure Organization
 
-**要件**: solution1 および solution2 フォルダを作成し、prototype/backend と同じファイル構成を持たせる
+**要件**: solution1 および solution2 フォルダを作成し、完全に独立した実装とする。各フォルダでMIMIZUKUの表示方法に違いを持たせる。
 
 **実装内容**:
-- `solution1/backend/` フォルダを作成
-- `solution2/backend/` フォルダを作成
-- 以下のファイルを prototype/backend から両フォルダにコピー:
+
+#### Solution1: 単一統合ビュー (Single Combined View)
+- `solution1/index.html` - メインページ
+- `solution1/viewer.html` - 詳細ビューページ
+- `solution1/app.js` - JavaScript実装
+- `solution1/backend/` - バックエンドAPI
   - `app.py` (6.4 KB) - Flask バックエンドアプリケーション
   - `app_custom.py` (14 KB) - カスタム API エンドポイント
   - `neowise_target_region.db` (832 KB) - NEOWISE データベース
   - `requirements.txt` (59 bytes) - Python 依存関係
+- `solution1/README.md` - 実装説明
+
+**特徴**: ターゲットとガイド星を1つのAladin画像に表示。中点を中心とした統合ビュー。
+
+#### Solution2: 左右分割ビュー (Side-by-Side View)
+- `solution2/index.html` - メインページ（左右分割対応）
+- `solution2/viewer.html` - 詳細ビューページ（左右分割対応）
+- `solution2/app.js` - JavaScript実装（2つのAladinインスタンス）
+- `solution2/backend/` - バックエンドAPI（solution1と同じ）
+- `solution2/README.md` - 実装説明と違いの解説
+
+**特徴**: ターゲットとガイド星を左右に並べて表示。2つの独立したAladinインスタンスで、各フィールドを個別に確認可能。
+
+#### MIMIZUKU表示方法の違い
+
+| 項目 | Solution1 | Solution2 |
+|------|-----------|-----------|
+| **表示方式** | 単一統合ビュー | 左右分割ビュー |
+| **Aladinインスタンス** | 1個 | 2個 |
+| **視野調整** | 統一（分離距離の1.5倍） | 個別（各0.05°固定） |
+| **詳細度** | 全体的 | 個別詳細 |
+| **色分け** | ターゲット（黄）、ガイド（シアン） | 同左 + 境界色分け |
+| **最適用途** | 小分離距離、全体確認 | 大分離距離、詳細確認 |
 
 **作成されたフォルダ**:
-- `/solution1/backend/`
-- `/solution2/backend/`
+- `/solution1/` - 完全な実装（4ファイル + backend/）
+- `/solution2/` - 完全な実装（4ファイル + backend/）
 
 ## テスト結果 / Test Results
 
@@ -78,15 +104,38 @@
 - ✅ null 値処理: 観測不可能なターゲットでもエラーが発生しない
 - ✅ 時刻入力: UI に時刻入力フィールドが表示され、デフォルト値が設定される
 - ✅ TAO サイト: ドロップダウンに TAO が表示され、デフォルトで選択される
-- ✅ フォルダ構成: solution1 と solution2 に必要なファイルがすべてコピーされる
+- ✅ フォルダ構成: solution1 と solution2 に完全な実装を作成
+- ✅ MIMIZUKU 表示:
+  - Solution1: 単一統合ビューで両フィールドを表示
+  - Solution2: 左右分割ビューで独立表示
 
 ## 変更ファイル一覧 / Changed Files
 
+**変更されたファイル (3件)**:
 1. `app.js` - エラー修正、時刻対応、TAO 追加
-2. `index.html` - 時刻入力フィールドと TAO オプションの追加
-3. `viewer.html` - 時刻入力フィールドと TAO オプションの追加
-4. `solution1/backend/*` - 新規作成（4ファイル）
-5. `solution2/backend/*` - 新規作成（4ファイル）
+2. `index.html` - 時刻入力と TAO オプション
+3. `viewer.html` - 時刻入力と TAO オプション
+
+**新規作成されたファイル (16件)**:
+4. `solution1/index.html` - Solution1 メインページ
+5. `solution1/viewer.html` - Solution1 詳細ビューページ
+6. `solution1/app.js` - Solution1 JavaScript（単一統合ビュー）
+7. `solution1/README.md` - Solution1 説明書
+8. `solution1/backend/app.py`
+9. `solution1/backend/app_custom.py`
+10. `solution1/backend/neowise_target_region.db`
+11. `solution1/backend/requirements.txt`
+12. `solution2/index.html` - Solution2 メインページ（左右分割）
+13. `solution2/viewer.html` - Solution2 詳細ビューページ（左右分割）
+14. `solution2/app.js` - Solution2 JavaScript（左右分割ビュー）
+15. `solution2/README.md` - Solution2 説明書
+16. `solution2/backend/app.py`
+17. `solution2/backend/app_custom.py`
+18. `solution2/backend/neowise_target_region.db`
+19. `solution2/backend/requirements.txt`
+
+**ドキュメント (1件)**:
+20. `WORK_SUMMARY.md` - 作業報告書（日本語）
 
 ## 技術的詳細 / Technical Details
 
