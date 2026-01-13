@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sky Viewer - Aladin Lite v3</title>
+    <link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-panel {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-bottom: 2px solid #444;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .control-row label {
+            font-weight: bold;
+            min-width: 120px;
+        }
+
+        .control-row input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #333;
+            color: #fff;
+        }
+
+        .control-row input[type="number"] {
+            width: 80px;
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #333;
+            color: #fff;
+        }
+
+        .control-row select {
+            padding: 8px;
+            border: 1px solid #555;
+            border-radius: 4px;
+            background-color: #333;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 8px 16px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #0052a3;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        #aladin-lite-div {
+            flex: 1;
+            position: relative;
+        }
+
+        .right-panel {
+            width: 400px;
+            background-color: #2a2a2a;
+            border-left: 2px solid #444;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 15px;
+            background-color: #333;
+            border-bottom: 2px solid #444;
+        }
+
+        .panel-header h2 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+
+        .star-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .star-item {
+            background-color: #333;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .star-item:hover {
+            background-color: #3a3a3a;
+        }
+
+        .star-item.selected {
+            border-color: #ffff00;
+            background-color: #3a3a3a;
+        }
+
+        .star-item.recommended {
+            background-color: #4a3a5a;
+            border-color: #ff00ff;
+        }
+
+        .star-item.recommended.selected {
+            border-color: #ffff00;
+            background-color: #5a4a6a;
+        }
+
+        .star-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .star-number {
+            font-weight: bold;
+            color: #4af;
+        }
+
+        .star-item.selected .star-number {
+            color: #ffff00;
+        }
+
+        .star-distance {
+            color: #aaa;
+            font-size: 12px;
+        }
+
+        .star-coords {
+            font-size: 12px;
+            color: #bbb;
+            margin-bottom: 3px;
+        }
+
+        .star-catalog {
+            font-size: 11px;
+            color: #888;
+        }
+
+        .observation-panel {
+            background-color: #333;
+            padding: 15px;
+            border-top: 2px solid #444;
+        }
+
+        .observation-panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .coord-display {
+            background-color: #2a2a2a;
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .coord-label {
+            color: #888;
+            font-size: 11px;
+            margin-bottom: 2px;
+        }
+
+        #confirm-button {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .status-message {
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .status-message.info {
+            background-color: #1a4d7a;
+            border: 1px solid #2a6da0;
+        }
+
+        .status-message.success {
+            background-color: #1a5a1a;
+            border: 1px solid #2a7a2a;
+        }
+
+        .status-message.error {
+            background-color: #7a1a1a;
+            border: 1px solid #a02a2a;
+        }
+
+        .legend {
+            padding: 10px;
+            background-color: #333;
+            margin-top: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 8px;
+            border: 2px solid;
+        }
+
+        .legend-color.recommended {
+            border-color: #ff00ff;
+            background-color: transparent;
+        }
+
+        .legend-color.other {
+            border-color: #00ffff;
+            background-color: transparent;
+        }
+
+        #loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+            z-index: 1000;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0066cc;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .accordion-header {
+            background-color: #3a3a3a;
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            user-select: none;
+        }
+
+        .accordion-header:hover {
+            background-color: #4a4a4a;
+        }
+
+        .accordion-header h3 {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .accordion-icon {
+            transition: transform 0.3s;
+            font-size: 18px;
+        }
+
+        .accordion-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .accordion-content.expanded {
+            max-height: 500px;
+            transition: max-height 0.3s ease-in;
+        }
+
+        .accordion-inner {
+            padding: 10px 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <div class="control-panel">
+                <div class="control-row">
+                    <label for="target-input">Target:</label>
+                    <input type="text" id="target-input" placeholder="例: 18h09m01.4800s -20d05m08.000s" value="18h09m01.4800s -20d05m08.000s">
+                    <button id="search-button">Search</button>
+                    <button id="view-results-button" style="background-color: #28a745;" disabled>詳細ビューで表示 →</button>
+                </div>
+                <div class="control-row">
+                    <label for="inst-pa-input">Inst. P.A. (deg):</label>
+                    <input type="number" id="inst-pa-input" value="0" min="0" max="360" step="0.1">
+                    <label for="pa-tolerance-input">Tolerance (deg):</label>
+                    <input type="number" id="pa-tolerance-input" value="30" min="0" max="180" step="1">
+                    <label for="pa-restrict-checkbox" style="min-width: auto; margin-left: 10px;">
+                        <input type="checkbox" id="pa-restrict-checkbox" checked style="width: auto; margin-right: 5px;">
+                        Restrict P.A.
+                    </label>
+                    <button id="update-pa-button">Update P.A.</button>
+                </div>
+                <div class="control-row">
+                    <label for="catalog-file">Star Catalog:</label>
+                    <input type="file" id="catalog-file" accept=".csv" multiple>
+                    <button id="load-catalog-button">Load Catalogs</button>
+                </div>
+                <div class="control-row">
+                    <label for="survey-select">Survey:</label>
+                    <select id="survey-select">
+                        <option value="2MASS/color">2MASS Color (Infrared)</option>
+                        <option value="P/DSS2/color">DSS2 Color (Optical)</option>
+                        <option value="P/allWISE/color">AllWISE Color</option>
+                        <option value="P/SDSS9/color">SDSS9 Color</option>
+                        <option value="P/PanSTARRS/DR1/color-z-zg-g">PanSTARRS DR1</option>
+                    </select>
+                    <button id="change-survey-button">Change Survey</button>
+                </div>
+                <div class="control-row">
+                    <label for="mag-band-select">Mag Filter:</label>
+                    <select id="mag-band-select">
+                        <option value="">No Filter (Load catalog first)</option>
+                    </select>
+                    <input type="number" id="mag-min" placeholder="Min" step="0.1" style="width: 80px;">
+                    <span>~</span>
+                    <input type="number" id="mag-max" placeholder="Max" step="0.1" style="width: 80px;">
+                    <button id="apply-mag-filter-button">Apply Filter</button>
+                </div>
+            </div>
+            <div id="aladin-lite-div">
+                <div id="loading-indicator">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="panel-header">
+                <h2>Stars in FoV (25 arcmin)</h2>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color recommended"></div>
+                        <span>Recommended guide stars</span>
+                    </div>
+                </div>
+            </div>
+            <div class="star-list" id="star-list">
+                <div class="status-message info">
+                    Enter target coordinates and click Search to find stars in the field of view.
+                </div>
+            </div>
+            <div class="observation-panel">
+                <!-- Observation Coordinates Accordion -->
+                <div class="accordion-header" id="obs-coord-header">
+                    <h3>Observation Coordinates</h3>
+                    <span class="accordion-icon">▼</span>
+                </div>
+                <div class="accordion-content" id="obs-coord-content">
+                    <div class="accordion-inner">
+                        <div class="coord-label">Target:</div>
+                        <div class="coord-display" id="target-coord-display">-</div>
+                        <div class="coord-label">Guide Star:</div>
+                        <div class="coord-display" id="guide-star-coord-display">-</div>
+                        <button id="confirm-button" disabled>Observe with this star</button>
+                        <button id="show-mimizuku-button" disabled style="margin-top: 10px; width: 100%;">Show MIMIZUKU Dual Field View</button>
+                    </div>
+                </div>
+
+                <!-- Observability Check Accordion -->
+                <div class="accordion-header" id="obs-check-header" style="margin-top: 10px;">
+                    <h3>Observability Check</h3>
+                    <span class="accordion-icon">▼</span>
+                </div>
+                <div class="accordion-content" id="obs-check-content">
+                    <div class="accordion-inner">
+                        <div style="margin-bottom: 8px;">
+                            <label for="obs-date" style="font-size: 12px; color: #aaa;">Date:</label>
+                            <input type="date" id="obs-date" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <label for="obs-time" style="font-size: 12px; color: #aaa;">Time (UTC):</label>
+                            <input type="time" id="obs-time" value="12:00" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                        </div>
+                        <div style="margin-bottom: 8px;">
+                            <label for="obs-location" style="font-size: 12px; color: #aaa;">Location:</label>
+                            <select id="obs-location" style="width: 100%; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; margin-top: 4px;">
+                                <option value="tao" selected>TAO (Chile, 5640m)</option>
+                                <option value="subaru">Subaru (Mauna Kea)</option>
+                                <option value="keck">Keck Observatory</option>
+                                <option value="magellan">Magellan (Las Campanas)</option>
+                                <option value="vlt">VLT (Paranal)</option>
+                            </select>
+                        </div>
+                        <button id="check-observability-button" style="width: 100%; margin-top: 4px;" disabled>Check Observability</button>
+                        <div id="observability-results" style="margin-top: 10px; font-size: 12px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MIMIZUKU Dual Field Modal -->
+    <div id="mimizuku-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 2000;">
+        <div style="position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-shrink: 0;">
+                <h2 style="color: white; margin: 0;">MIMIZUKU Dual Field View (1'×2' each)</h2>
+                <div style="display: flex; gap: 10px;">
+                    <button id="toggle-png-view-button" style="padding: 10px 15px; background: #0a5; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 16px; white-space: nowrap;">
+                        <span id="png-mode-text">Switch to PNG View</span>
+                    </button>
+                    <!-- ★修正点：paddingを調整し、white-spaceを追加 -->
+                    <button id="close-mimizuku-button" style="padding: 10px 15px; background: #c00; border: none; border-radius: 4px; color: white; cursor: pointer; font-size: 16px; white-space: nowrap;">Close</button>
+                </div>
+            </div>
+            <div id="mimizuku-view-container" style="flex: 1; display: flex; flex-direction: row; gap: 10px; min-height: 0;">
+              <div style="flex: 1; display: flex; flex-direction: column; border: 2px solid #ff0; background: #000;">
+                <div style="background: #ff0; color: #000; text-align: center; padding: 5px; font-weight: bold;">Target Field</div>
+                <div id="mimizuku-field-target" style="flex: 1; position: relative;"></div>
+              </div>
+              <div style="flex: 1; display: flex; flex-direction: column; border: 2px solid #0ff; background: #000;">
+                <div style="background: #0ff; color: #000; text-align: center; padding: 5px; font-weight: bold;">Guide Star Field</div>
+                <div id="mimizuku-field-guide" style="flex: 1; position: relative;"></div>
+              </div>
+            </div>
+            <div style="color: white; text-align: center; margin-top: 20px; font-size: 14px; flex-shrink: 0;">
+                <p id="mimizuku-description">Showing Target and Guide Star fields (1'×2' each) side-by-side for detailed inspection</p>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Aladin Lite v3: Note that /latest/ version does not support SRI as it's a rolling release.
+         For production use, consider pinning to a specific version when available. -->
+    <script type="text/javascript" src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8" onerror="handleAladinLoadError()"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"
+            integrity="sha512-dfX5uYVXzyU8+KHqj8bjo7UkOdg18PaOtpa48djpNbZHwExddghZ+ZmzWT06R5v6NSk3ZUfsH6FNEDepLx9hPQ=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"
+            onerror="handlePapaParseLoadError()"></script>
+    <!-- html2canvas for PNG export functionality -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"
+            integrity="sha512-BNaRQnYJYiPSqHHDb58B0yaPfCu+Wgds8Gp/gU33kqBtgNS4tSPHuGibyoeqMV/TJlSKda6FXzoEyYGjTe+vXA=="
+            crossorigin="anonymous"
+            referrerpolicy="no-referrer"></script>
+    <script>
+        // Handle library load errors
+        function handleAladinLoadError() {
+            console.error('Failed to load Aladin Lite library');
+            document.getElementById('aladin-lite-div').innerHTML =
+                '<div style="padding: 20px; background: #7a1a1a; margin: 20px; border-radius: 8px;">' +
+                '<h3>Error Loading Aladin Lite</h3>' +
+                '<p>Failed to load the Aladin Lite library. This may be due to:</p>' +
+                '<ul>' +
+                '<li>Network connectivity issues</li>' +
+                '<li>Ad blockers or browser extensions blocking external resources</li>' +
+                '<li>Firewall restrictions</li>' +
+                '</ul>' +
+                '<p>Please check your internet connection and browser settings, then reload the page.</p>' +
+                '</div>';
+        }
+
+        function handlePapaParseLoadError() {
+            console.error('Failed to load PapaParse library');
+        }
+    </script>
+    <script src="app.js"></script>
+</body>
+</html>
